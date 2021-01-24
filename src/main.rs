@@ -10,23 +10,24 @@ fn main() {
     match args.nth(1) {
         Some(arg) => match arg.as_str() {
             "lerp" => {
-                lerp_images(args.next().unwrap(),
-                            args.next().unwrap());
+                let (file1, file2) = (args.next(), args.next());
+                if file1.is_none() || file2.is_none() { 
+                    println!("Two (2) input files must be specified!");
+                    return;
+                }
+
+                lerp_images(file1.unwrap(), file2.unwrap());
             },
             "ascii" => {
-                let file = args.next().unwrap();
-                // TODO defaulting to 0 is confusing
-                let dimensions = match (args.next(), args.next()) { 
-                    (Some(w), Some(h)) => 
-                        Some( (w.parse::<u32>().unwrap(),
-                               h.parse::<u32>().unwrap()) ),
-                    _ => {
-                        println!("No dimensions specified; \
-                                  matching the input image.");
-                        None
-                    }
-                };
-                ascii_image(file, dimensions);
+                let file = args.next()
+                               .expect("An input file must be specified!");
+                let (w, h) = (args.next().expect("Width must be specified!"),
+                              args.next().expect("Height must be specified!"));
+                // Parse the dimensions from strings
+                let (w, h) = (w.parse::<u32>().expect("Cannot parse width."),
+                              h.parse::<u32>().expect("Cannot parse height."));
+
+                ascii_image(file, w, h);
             },
             _ => println!("No such function"),
         },
@@ -78,35 +79,22 @@ fn lerp_images(file1: String, file2: String) {
 }
 
 // Using ascii characters, generate a textfile representation of an image
-// NOTE big image produces a HUGE textfile if no dimensions are specified
-fn ascii_image(srcfile: String, dimensions: Option<(u32,u32)>) {
+fn ascii_image(srcfile: String, w: u32, h: u32) {
     // Open the imagefile
     let reader = ImageReader::open(&srcfile)
-                    .or_else(|msg| {
-                        Err(format!("Error opening '{}': {}", srcfile, msg))
-                    });
-    if reader.is_err() { 
-        return; 
-    }
+                    .expect(format!("Error opening '{}'", srcfile).as_str());
 
-
-    //Turn the image into a processable format
-    let img = reader.unwrap()
-                    .decode()
-                    .unwrap();
-    // Resize the image if dimensions were given
-    dimensions.or_else(|(w,h)| {
-        img.resize(w, h, image::imageops::FilterType::Triangle);
-    });
-    let img = img.grayscale()
-                 .into_rgb16();
+    // Turn the image into a processable format
+    let img = reader.decode()
+                    .unwrap()
+                    .resize(w, h, image::imageops::FilterType::Triangle)
+                    .grayscale()
+                    .into_rgb16();
 
     println!("Image loaded");
 
-
     let mut ascii = Vec::new();
     let n = img.pixels().len() as u32;
-    let (w, h) = (img.width(), img.height());
     ascii.reserve((n * 2 + h) as usize);
     for (i, &pixel) in (0..n).zip(img.pixels())  {
         if i % w == 0 && i != 0 {
