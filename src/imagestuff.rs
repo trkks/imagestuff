@@ -9,7 +9,6 @@ type ImgBuffer16 = image::ImageBuffer<Rgb<u16>, Vec<u16>>;
 // https://doc.rust-lang.org/book/ch04-03-slices.html says it's for "more
 // experienced Rustacean[s]"
 
-// TODO So many unwraps... Figure out the Result cascading?
 pub fn main(args: Vec<String>) {
     let arg = args.get(0).expect("Need to select a function from the module");
 
@@ -123,22 +122,18 @@ fn open_decode(file: &str) -> image::DynamicImage {
 // create it. Return True if exists or created
 fn confirm_dir(dirname: &str) -> bool {
     let dir = format!(".\\{}\\", dirname);
-    println!("Confirming '{}' exists", dir);
+    // Ebin :DD
     std::path::Path::new(&dir).exists() || {
         print!("Directory `{}` not found. Create it [y/n]? ", dir);
         std::io::stdout().flush().unwrap();
         let mut answer = String::new();
-        match std::io::stdin().read_line(&mut answer) {
-            Ok(_) => {
-                if answer.as_str().contains('y') {
-                    std::fs::create_dir(dir).unwrap();
-                    true
-                } else {
-                    false
-                }
-            }, 
-            _ => false
+        if let Ok(_) = std::io::stdin().read_line(&mut answer) {
+            if answer.starts_with("y") {
+                std::fs::create_dir(dir).unwrap();
+                return true
+            }
         }
+        false
     }
 }
 
