@@ -1,8 +1,29 @@
-use std::env;
-mod imagestuff;
+use std::{env, process};
+use imagestuff::{ascii, lerp};
 
 fn main() {
-    imagestuff::main(env::args().skip(1).collect())
+    let mut args = env::args();
+    // Skip the executable name
+    args.next();
+
+    match args.next() {
+        Some(arg) => {
+            match arg.to_lowercase().as_str() {
+                "ascii" => ascii::run(args),
+                "lerp"  => lerp::run(args),
+                _       => {
+                    eprintln!("No such module");
+                    process::exit(1);
+                },
+            }
+        },
+        None => {
+            eprintln!("Please select a module");
+            process::exit(1);
+        },
+    }.unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+    })
 }
 
 

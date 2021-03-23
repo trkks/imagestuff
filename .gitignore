@@ -2,3 +2,5 @@
 /ascii
 /pics
 *.swp
+*.lock
+*.toml
