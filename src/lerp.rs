@@ -23,6 +23,9 @@ impl LerpConfig {
 
 pub fn run(args: env::Args) -> Result<(), String> {
     let config = LerpConfig::new(args).map_err(|e| format!("{}", e))?;
+
+    // TODO Lerp based on the size of first input ie. squeeze/stretch to fit
+
     // zip the filepaths so, that lerp is being done between every two
     // consecutive paths eg.
     // f1,f2,f3,f4 -> f1:f2, f2:f3, f3:f4

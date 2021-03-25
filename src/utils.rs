@@ -68,15 +68,8 @@ pub fn pixel_to_ascii(pixel: Rgb<u16>) -> char {
 
 pub fn half_lerp(p1: Rgb<u16>, p2: Rgb<u16>) -> [u16;3] {
     // Linear interpolation aped from wikipedia
-
-    let c = u16::MAX as f32;
-    // Normalize and subtract
-    let r = ((p2[0] as f32 / c - p1[0] as f32 / c) * c) as u16;
-    let g = ((p2[1] as f32 / c - p1[1] as f32 / c) * c) as u16;
-    let b = ((p2[2] as f32 / c - p1[2] as f32 / c) * c) as u16;
-
-    // Return some shoddy shite 
-    [p1[0] + (r >> 1),
-     p1[1] + (g >> 1),
-     p1[2] + (b >> 1)]
+    // Normalize and subtract and divide by 2 and add p1 and return 
+    [p1[0] + ((p2[0] as f32 - p1[0] as f32) as u16 >> 1),
+     p1[1] + ((p2[1] as f32 - p1[1] as f32) as u16 >> 1),
+     p1[2] + ((p2[2] as f32 - p1[2] as f32) as u16 >> 1)]
 }
