@@ -16,7 +16,8 @@ impl AsciiConfig {
     pub fn new(mut args: env::Args) -> Result<Self, String> {
         let source_file = match args.next() {
             // Source file's path is saved as OS specific absolute path
-            Some(path) => PathBuf::from(&path).canonicalize().map_err(|e| e.to_string())?,
+            Some(path) => PathBuf::from(&path).canonicalize()
+                                              .map_err(|e| e.to_string())?,
             // Return a text description Error if unsufficient args
             None       => return Err(format!("Didn't get a source file")),
         };
@@ -53,9 +54,11 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
 
     println!("Converting to ascii");
     let mut ascii = Vec::new();
-    ascii.reserve(img.pixels().len() * 2 + h as usize);
+    let n = img.pixels().len();
+    ascii.reserve(n * 2 + h as usize);
+    let mut progress = utils::ProgressBar::new(n, 50);
+    progress.set_stdout();
     for (i, &pixel) in img.pixels().enumerate() {
-        // TODO Put a cute progress bar here :3
         if i % w as usize == 0 && i != 0 {
             ascii.push('\n');
         }
@@ -63,6 +66,9 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
         // Push twice so that textfile looks more like an image in an editor
         ascii.push(asciipixel);
         ascii.push(asciipixel);
+
+        // TODO Put a cute progress bar here :3
+        progress.print_update(); 
     } 
 
     let newfile = format!("./ascii/{}.txt", utils::filename(srcfile));

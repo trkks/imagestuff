@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::env;
 use image::Rgb as Rgb;
 use crate::utils;
@@ -36,6 +37,7 @@ pub fn run(args: env::Args) -> Result<(), String> {
     // f1:f2, f2:f3, f3:f4, (f4:None)
     let one_path_skipped =  config.filepaths.iter().skip(1);
     let zipped_paths = config.filepaths.iter().zip(one_path_skipped);
+    // TODO load the images into memory beforehand
     for (f1, f2) in zipped_paths {
         println!("Lerping between: '{}' and '{}'", f1, f2);
         lerp_images(f1, f2)?;
@@ -65,10 +67,18 @@ fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
     // Lerp between corresponding pixels in the two images and save to a third
     let mut new_pixels :Vec<u16> = Vec::new();
     new_pixels.reserve((w * h * 3) as usize); // cast to usize
+    
+    // Configure a progress bar
+    let mut progress = utils::ProgressBar::new((w * h) as usize, 50);
+    progress.set_stdout();
+
     for (&p1, &p2) in img1.pixels().zip(img2.pixels()) {
         // Add new pixel lerped between two in image
         let [r,g,b] = utils::half_lerp(p1, p2);
         new_pixels.push(r); new_pixels.push(g); new_pixels.push(b); 
+
+        // Display the progress bar
+        progress.print_update(); 
     }
 
     let newfile = format!("./pics/lerp_{}_{}.png",
