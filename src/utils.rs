@@ -91,7 +91,7 @@ impl std::fmt::Display for ProgressBar {
 pub fn open_decode(file: &str) -> Result<DynamicImage, String> {
     println!("Loading image {}", &file);
     match ImageReader::open(&file) {
-        Ok(reader) => reader.decode().map_err(|e| format!("{}", e)), 
+        Ok(reader) => reader.decode().map_err(ToString::to_string), 
         Err(msg)   => Err(format!("{}", msg)),
     }
 }

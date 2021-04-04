@@ -23,7 +23,7 @@ impl LerpConfig {
 }
 
 pub fn run(args: env::Args) -> Result<(), String> {
-    let config = LerpConfig::new(args).map_err(|e| format!("{}", e))?;
+    let config = LerpConfig::new(args).map_err(ToString::to_string)?;
 
     // TODO Lerp based on the size of first input ie. squeeze/stretch to fit
 
