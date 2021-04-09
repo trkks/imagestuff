@@ -17,7 +17,7 @@ impl AsciiConfig {
         let source_file = match args.next() {
             // Source file's path is saved as OS specific absolute path
             Some(path) => PathBuf::from(&path).canonicalize()
-                                              .map_err(ToString::to_string)?,
+                                              .map_err(|e| e.to_string())?,
             // Return a text description Error if unsufficient args
             None       => return Err(format!("Didn't get a source file")),
         };
@@ -34,7 +34,7 @@ impl AsciiConfig {
 }
 
 pub fn run(args: env::Args) -> Result<(), String> {
-    let config = AsciiConfig::new(args).map_err(ToString::to_string)?;
+    let config = AsciiConfig::new(args).map_err(|e| e.to_string())?;
     ascii_image(config.source_file.to_str().unwrap(), 
                 config.width, config.height)
 }
@@ -46,18 +46,17 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
     }    
 
     // First open imagefile, confirming its validity
-    let img = utils::open_decode(&srcfile).map_err(ToString::to_string)?;
+    let img = utils::open_decode(&srcfile).map_err(|e| e.to_string())?;
     // Then turn the image into a processable format for the ascii conversion
     let img = img.resize(w, h, image::imageops::FilterType::Triangle)
                  .grayscale()
                  .into_rgb16();
 
-    println!("Converting to ascii");
     let mut ascii = Vec::new();
     let n = img.pixels().len();
     ascii.reserve(n * 2 + h as usize);
-    let mut progress = utils::ProgressBar::new(n, 50);
-    progress.set_stdout();
+    let mut progress = utils::ProgressBar::new(n, 25);
+    progress.title("Converting to ascii");
     for (i, &pixel) in img.pixels().enumerate() {
         if i % w as usize == 0 && i != 0 {
             ascii.push('\n');
@@ -67,15 +66,15 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
         ascii.push(asciipixel);
         ascii.push(asciipixel);
 
-        // TODO Put a cute progress bar here :3
-        progress.print_update(); 
+        progress.title(&format!("{}/{}", i+1, n));
+        progress.print_update().map_err(|e| e.to_string())?; 
     } 
 
     let newfile = format!("./ascii/{}.txt", utils::filename(srcfile));
-    println!("Saving to {}", newfile);
+    println!("\nSaving to {}", newfile);
 
-    let mut file = File::create(newfile).map_err(ToString::to_string)?;
+    let mut file = File::create(newfile).map_err(|e| e.to_string())?;
 
     file.write_all(ascii.into_iter().collect::<String>().as_bytes())
-        .map_err(ToString::to_string)
+        .map_err(|e| e.to_string())
 }

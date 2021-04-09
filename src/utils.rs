@@ -5,93 +5,89 @@ use image::{Rgb, DynamicImage};
 
 
 /// An ascii-graphics bar to easily print out the amount of progress a program
-/// has done until a certain limit.
-/// # Examples:
+/// has done per iteration of a loop or between some other equal sized tasks.
+///
+/// # Example:
 /// ```
 /// let mut progress = ProgessBar::new(1000, 15);
 /// progress.set_title("Amount of work done");
-/// progress.set_stdout();
 /// for _ in range(0..1000) {
 ///     // -- do work --
 ///
-///     progress.print_update(); 
+///     progress.print_update()?; 
 ///     // Example of output when looped 400 to 499 times:
 ///     // Amount of work done: [====......]
 /// }
 /// ```
 pub struct ProgressBar {
-    source_len: usize,
     source_progress: usize,
+    threshold: usize,
     bar: Vec<u8>,
-    out: Some<std::io::Stdout>,
-    title: String, // TODO This could probably be &str pretty easily
+    title: String,
+    out: Stdout,
 }
 impl ProgressBar {
+    /// Creates a new ProgressBar of `bar_len` characters wide that fills up
+    /// based on update count relative to `source_len`
     pub fn new(source_len: usize, bar_len: usize) -> Self {
         // A bar's length is the length of content not '\r', '[' or ']'
-        let mut bar = iter::repeat('.' as u8).take(bar_len)
-                                             .collect::<Vec<u8>>();
+        let bar : Vec<u8> = iter::repeat('.' as u8).take(bar_len)
+                                                    .collect();
         ProgressBar {
-            source_len,
             source_progress: 0,
+            threshold: source_len / bar_len,
             bar,
+            title: String::from("Progress"),
+            out: std::io::stdout(),
         }
     }
 
-    pub fn update(&mut self) {
-        if self.source_progress == self.source_len { return }
+    /// Signal that progress has been made. If this update leads to filling up
+    /// the bar, it is printed to stdout for reflecting this new state
+    pub fn print_update(&mut self) -> IOResult<()> {
+        if self.update() {
+            self.print()?
+        }
+        Ok(())
+    }
+
+    /// Change the title shown next to the progress bar
+    pub fn title(&mut self, title: &str) {
+        self.title = String::from(title);
+    }
+
+    fn update(&mut self) -> bool{
         // Source has implied a state update, so increment progress
         self.source_progress += 1;
-        // Calcutate a relative length for the current amount of progress
-        // and if the bar should be updated or not
-        // A bar's length is the length of content not '\r', '[' or ']'
-        let len = self.bar.iter()
-                          .filter(|x| **x == ('=' as u8))
-                          .count();
-        // Normalized length should match the amount of bar filled until now
-        let norm_len = (self.source_progress as f32 / self.source_len as f32 
-                        * len as f32) as usize;
-        // Update the bar if normalized length has increased from earlier
-        if len < norm_len {
-            self.bar[len+1] = '=' as u8;
+        if self.source_progress % self.threshold == 0 {
+            let index = self.bar.iter().position(|x| *x == '.' as u8)
+                        .unwrap_or(0);
+            self.bar[index] = '=' as u8;
+            return true
         }
+        return false
     }
-}
 
-impl std::fmt::Display for ProgressBar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.bar.iter().map(|x| *x as char)
-                                       .collect::<String>())
+    fn print(&mut self) -> IOResult<()> {
+        let prefix = format!("\r{} [", self.title);
+        self.out.write(prefix.as_bytes()).map(|_| ())?;
+        self.out.write(self.bar.as_slice()).map(|_| ())?;
+        let progressed = self.bar.iter().rposition(|x| *x == '=' as u8)
+                                        .unwrap_or(0) + 1;
+        if progressed < self.bar.len() {
+            self.out.write(b"]").map(|_| ())?;
+        } else {
+            self.out.write(b"] Done!").map(|_| ())?;
+        }
+        self.out.flush()
     }
 }
-//pub fn print_progress(len: u32, progress: u32, max: u32, stdout: &mut Stdout) 
-//-> IOResult<()> {
-//    // Alias to add one so that progress bar closes at the end
-//    progress + 1;
-//    // Calcutate a relative length for the current amount of progress.
-//    // Normalize progress to max and fit to len (=terminal width)
-//    let bar_len = (progress as f32 / max as f32 * len as f32) as u32;
-//    // TODO after string allocation below is fixed, remove this fuglyness
-//    if bar_len % (len / 4) != 0 { return Ok(()) }
-//    // Make equivalent strings
-//    // FIXME This string-making-bullshit slows down like crazy
-//    let done = iter::repeat('=').take(bar_len as usize)
-//                                .collect::<String>();
-//    let left = iter::repeat('.').take((len - bar_len) as usize)
-//                                .collect::<String>();
-//    // Print progress bar
-//    stdout.write(format!("\r[{}{}]", done, left).as_bytes()).map(|_| ())?;
-//    if progress == max {
-//        stdout.write(" Done!\n".as_bytes()).map(|_| ())?;
-//    }
-//    stdout.flush()
-//}
 
 // Utility for loading an image from filepath into a DynamicImage
 pub fn open_decode(file: &str) -> Result<DynamicImage, String> {
     println!("Loading image {}", &file);
     match ImageReader::open(&file) {
-        Ok(reader) => reader.decode().map_err(ToString::to_string), 
+        Ok(reader) => reader.decode().map_err(|e| e.to_string()), 
         Err(msg)   => Err(format!("{}", msg)),
     }
 }
