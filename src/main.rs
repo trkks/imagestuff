@@ -1,5 +1,5 @@
 use std::{env, process};
-use imagestuff::{ascii, lerp, cursed};
+use imagestuff;
 
 fn main() {
     let mut args = env::args();
@@ -9,10 +9,11 @@ fn main() {
     match args.next() {
         Some(arg) => {
             match arg.to_lowercase().as_str() {
-                "ascii"  => ascii::run(args),
-                "lerp"   => lerp::run(args),
-                "cursed" => cursed::run(args),
-                _        => {
+                "ascii"   => imagestuff::ascii::run(args),
+                "lerp"    => imagestuff::lerp::run(args),
+                "cursed"  => imagestuff::cursed::run(args),
+                "raycast" => imagestuff::raycast::run(),
+                _         => {
                     eprintln!("No such module");
                     process::exit(1);
                 },
