@@ -12,7 +12,7 @@ fn main() {
                 "ascii"   => imagestuff::ascii::run(args),
                 "lerp"    => imagestuff::lerp::run(args),
                 "cursed"  => imagestuff::cursed::run(args),
-                "raycast" => imagestuff::raycast::run(),
+                "raycast" => imagestuff::raycast::run(args),
                 _         => {
                     eprintln!("No such module");
                     process::exit(1);

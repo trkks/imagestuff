@@ -1,3 +1,4 @@
+use std::env::{Args};
 use image::{ImageBuffer, Rgb};
 
 type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
@@ -112,11 +113,16 @@ impl Ray {
     }
 }
 
-pub fn run() -> Result<(), String> {
+pub fn run(mut args: Args) -> Result<(), String> {
+    // Image bounds
+    let (width, height) = match (args.next(), args.next()) {
+        (Some(a),None   ) => (a.parse().unwrap(),a.parse().unwrap()),
+        (Some(a),Some(b)) => (a.parse().unwrap(),b.parse().unwrap()),
+        _                 => (1024, 1024),
+    };
+
     // Depth-bounds of the frustum
     let zbs: ZBounds = (-1.0, 2.0);
-    // Image of 256x256 pixels
-    let (width, height) = (1024, 1024);
     // Camera fov is 90 degrees ("fov" is named "angle" for reasons(?))
     let angle = std::f32::consts::PI / 2.0;
     let focal_point = Vector3::new(0.0,0.0,-2.0);
