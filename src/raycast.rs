@@ -1,5 +1,4 @@
 use image::{ImageBuffer, Rgb};
-use std::convert::TryInto;
 
 type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
 
@@ -24,14 +23,41 @@ impl Vector3 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
 }
+impl std::ops::Mul<f32> for Vector3 {
+    type Output = Self;
+    fn mul(self, c: f32) -> Self::Output {
+        Vector3::new(self.x * c, self.y * c, self.z * c)
+    }
+}
+impl std::ops::Add for Vector3 {
+    type Output = Self;
+    fn add(self, other: Self) -> Self::Output {
+        Vector3::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+}
 impl std::ops::Sub for Vector3 {
     type Output = Self;
     fn sub(self, other: Self) -> Self::Output {
         Vector3::new(self.x - other.x, self.y - other.y, self.z - other.z)
     }
 }
+impl std::ops::Neg for Vector3 {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Vector3::new(-self.x, -self.y, -self.z)
+    }
+}
+impl From<Vector3> for Rgb<u16> {
+    fn from(v: Vector3) -> Self { 
+        Rgb(
+            [ (v.x.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
+              (v.y.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
+              (v.z.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16 ]
+        )
+    }
+}
 
-type SphereIntersection = Option<f32>;
+type SphereIntersection = Option<(f32, Vector3)>;
 type ZBounds = (f32, f32); // Represents the depth-bounds of the view-frustum
 
 struct Sphere {
@@ -39,7 +65,7 @@ struct Sphere {
     pub radius: f32,
 }
 impl Sphere {
-    pub fn intersect(&self, ray: Ray, zbs: ZBounds) -> SphereIntersection {
+    pub fn intersect(&self, ray: &Ray, zbs: ZBounds) -> SphereIntersection {
         // Calculate the items for quadratic formula
         let to_ray_origin = ray.origin() - self.origin;
         let (a, b, c) = (
@@ -59,11 +85,11 @@ impl Sphere {
         );
 
         // Check that the intersections are inside the depth-bounds and 
-        // select the intersection closest to ray origin
+        // select the normal of intersection point closest to ray origin
         if        zbs.0 <= tt.0 && tt.0 <= zbs.1 && tt.0 < tt.1 {
-            Some(tt.0)
+            Some( (tt.0, (ray.direction() - self.origin).normalized()) )
         } else if zbs.0 <= tt.1 && tt.1 <= zbs.1 {
-            Some(tt.1)
+            Some( (tt.1, (ray.direction() - self.origin).normalized()) )
         } else {
             None
         }
@@ -81,58 +107,75 @@ impl Ray {
     }
     pub fn origin(&self) -> Vector3 { self.origin }
     pub fn direction(&self) -> Vector3 { self.direction }
+    pub fn cast(&self, t: f32) -> Vector3 {
+        self.origin + (self.direction * t)
+    }
 }
 
 pub fn run() -> Result<(), String> {
     // Depth-bounds of the frustum
     let zbs: ZBounds = (-1.0, 2.0);
     // Image of 256x256 pixels
-    let (width, height) = (64, 64);
-    let mut image: Vec<[u16;3]> = Vec::with_capacity(width * height);
+    let (width, height) = (1024, 1024);
     // Camera fov is 90 degrees ("fov" is named "angle" for reasons(?))
     let angle = std::f32::consts::PI / 2.0;
     let focal_point = Vector3::new(0.0,0.0,-2.0);
     // Sphere at origin
     let sphere = Sphere { origin: Vector3::new(0.0,0.0,0.0), radius: 1.0 };
-    // Color of the sphere (Currently: white)
-    let color = Rgb([0xffff,0xffff,0xffff]);
+
+    // Color used:
+    let sphere_diffuse      = Vector3::new(0.0,0.6,0.8); // light blue?
+    let sphere_specular     = Vector3::new(1.0,0.0,0.0); // red
+    let background_color    = Vector3::new(0.0,0.0,0.0); // black
 
     // Render:
-    for iy in 0..height {
+    let image = ImgBuffer16::from_fn(width as u32, height as u32, |ix, iy| {
+
         // Calculate image plane coordinates x,y (so that they're in [-1, 1])
         let y: f32 = (iy as f32 / height as f32) * 2.0 - 1.0;  
-        for ix in 0..width {
-            // Same operation as for `y` above
-            let x: f32 = (ix as f32 / width as f32) * 2.0 - 1.0;  
+        let x: f32 = (ix as f32 / width  as f32) * 2.0 - 1.0;  
 
-            // TODO Google this z-formula; smth to do with fov and trigonometry
-            let z = 1.0 / f32::tan(angle / 2.0);
+        // TODO Google this z-formula; smth to do with fov and trigonometry
+        let z = 1.0 / f32::tan(angle / 2.0);
 
-            // Generate ray from camera to the image plane.
-            let direction = Vector3::new(x, y, z).normalized();
-            let ray = Ray::new(focal_point, direction);
-            
-            if let Some(t) = sphere.intersect(ray, zbs) {
-                println!("intensity: {}", t);
-                // Set the pixel to correct color intensity on sphere 
-                image.push( 
-                    color.0.iter().map(|c| (*c as f32 * (t / zbs.1)) as u16)
-                                  .collect::<Vec<u16>>()
-                                  .try_into()
-                                  .unwrap() // Can't (or shouldn't?) panic
-                );
-            } else {
-                // Background is black
-                image.push([0,0,0]);
-            }
-        }
-    }
+        // Generate ray from camera to the image plane.
+        // NOTE this is not a general form, as the camera now has hardcoded
+        // horizontal = (1,0,0), up = (0,1,0), direction =  (0,0,1).
+        let direction = Vector3::new(x, y, z).normalized();
+
+        let ray = Ray::new(focal_point, direction);
+        
+        let color = if let Some((t, normal)) = sphere.intersect(&ray, zbs) {
+            // Shade the pixel on sphere (light position == (0,1,-.5)):
+
+            let surface_to_light = Vector3::new(0.0,1.0,-0.5) - ray.cast(t);
+
+            // Diffuse shading
+            let diffuse_amount = surface_to_light.dot(normal).clamp(0.0, 1.0);
+
+            // Specular shading:
+            let v = normal * (-ray.direction()).dot(normal) * 2.0
+                    + ray.direction();
+            let specular_amount = surface_to_light.dot(v)
+                                    .clamp(0.0, 1.0)
+                                    .powf(1.0); // to the power of shininess
+
+
+            background_color 
+            + (sphere_diffuse * diffuse_amount)
+            + (sphere_specular * specular_amount)
+
+        } else {
+            // Shade the pixel on background
+            background_color
+        };
+
+        color.into()
+
+    });
 
     // Write to image file
-    ImgBuffer16::from_vec(width as u32, height as u32, image.concat())
-        .unwrap()
-        .save("raycast_sphere.png")
-        .unwrap(); // TODO Handle error-result
+    image.save("raycast_sphere.png").unwrap(); // TODO Handle error-result
 
     Ok(())
 }
