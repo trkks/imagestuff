@@ -104,7 +104,7 @@ struct Ray {
 impl Ray {
     pub fn new(origin: Vector3, direction: Vector3) -> Self {
         // TODO Normalize direction?
-        Ray { origin, direction }   
+        Ray { origin, direction: direction.normalized() }   
     }
     pub fn origin(&self) -> Vector3 { self.origin }
     pub fn direction(&self) -> Vector3 { self.direction }
@@ -122,7 +122,9 @@ pub fn run(mut args: Args) -> Result<(), String> {
     };
 
     // Depth-bounds of the frustum
-    let zbs: ZBounds = (-1.0, 2.0);
+    // FIXME For some reason the frustum cuts sphere at z = 1.0 when shouldnt
+    // it cut at z = -1.0 as sphere is centered at origin and has radius of 1?
+    let zbs: ZBounds = (1.00, 2.0);
     // Camera fov is 90 degrees ("fov" is named "angle" for reasons(?))
     let angle = std::f32::consts::PI / 2.0;
     let focal_point = Vector3::new(0.0,0.0,-2.0);
@@ -154,15 +156,17 @@ pub fn run(mut args: Args) -> Result<(), String> {
         let color = if let Some((t, normal)) = sphere.intersect(&ray, zbs) {
             // Shade the pixel on sphere (light position == (0,1,-.5)):
 
-            let surface_to_light = Vector3::new(0.0,1.0,-0.5) - ray.cast(t);
+            let surface_to_light = (Vector3::new(0.0,1.0,-0.5) - ray.cast(t))
+                                   .normalized();
 
             // Diffuse shading
             let diffuse_amount = surface_to_light.dot(normal).clamp(0.0, 1.0);
 
-            // Specular shading:
-            let v = normal * (-ray.direction()).dot(normal) * 2.0
-                    + ray.direction();
-            let specular_amount = surface_to_light.dot(v)
+            // Specular shading: 
+            let reflection = (normal * (surface_to_light).dot(normal) * 2.0
+                    - surface_to_light)
+                    .normalized();
+            let specular_amount = reflection.dot(-ray.direction())
                                     .clamp(0.0, 1.0)
                                     .powf(1.0); // to the power of shininess
 
