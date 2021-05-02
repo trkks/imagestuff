@@ -12,7 +12,7 @@ but could now be better suited for low-to-no-control superimposement of images
 ":D")
 
 ### cursed
-Does some shifty stuff with an images pixels; throaway.
+Does some shifty stuff with an images pixels; throwaway.
 
 ### raycast
 Makes an image that contains a sphere. Sphere made with code translated from
