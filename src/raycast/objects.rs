@@ -2,6 +2,7 @@ use crate::raycast::vector3::Vector3;
 use crate::raycast::ZBounds;
 
 type SphereIntersection = Option<(f32, Vector3)>;
+
 pub struct Sphere {
     origin: Vector3,
     radius: f32,
@@ -50,7 +51,7 @@ pub struct Ray {
 impl Ray {
     pub fn new(origin: Vector3, direction: Vector3) -> Self {
         // TODO Normalize direction?
-        Ray { origin, direction: direction.normalized() }   
+        Ray { origin, direction: direction }   
     }
     pub fn origin(&self) -> Vector3 { self.origin }
     pub fn direction(&self) -> Vector3 { self.direction }

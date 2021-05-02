@@ -20,6 +20,13 @@ impl Vector3 {
     pub fn dot(&self, other: Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
+    pub fn cross(lhs: Self, rhs: Self) -> Self {
+        Vector3::new(
+            lhs.y*rhs.z - lhs.z*rhs.y,
+            lhs.z*rhs.x - lhs.x*rhs.z,
+            lhs.x*rhs.y - lhs.y*rhs.x
+        )
+    }
 }
 impl std::ops::Mul<f32> for Vector3 {
     type Output = Self;

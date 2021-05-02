@@ -8,7 +8,6 @@ use std::env::{Args};
 use image::{ImageBuffer, Rgb};
 
 type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
-type ZBounds = (f32, f32); // Represents the depth-bounds of the view-frustum
 
 pub fn run(mut args: Args) -> Result<(), String> {
     // Image bounds
@@ -18,46 +17,46 @@ pub fn run(mut args: Args) -> Result<(), String> {
         _                 => (1024, 1024),
     };
 
-    // Depth-bounds of the frustum
-    // FIXME For some reason the frustum cuts sphere at z = 1.0 when shouldnt
-    // it cut at z = -1.0 as sphere is centered at origin and has radius of 1?
-    let zbs: ZBounds = (-1.5, 1.5);
-    // Camera fov is 90 degrees ("fov" is named "angle" for reasons(?))
-    let angle = std::f32::consts::PI / 2.0;
-    let focal_point = Vector3::new(0.0,0.0,-2.0);
-    // Sphere at origin
-    let sphere  = Sphere::new(Vector3::new(0.5,0.0,0.0), 1.0);
-    let sphere2 = Sphere::new(Vector3::new(0.0,0.5,1.0), 1.0);
+    // Camera fov is 90 degrees
+    let camera = PerspectiveCamera::new(
+        Vector3::new(0.0, 0.0,-2.0), // position
+        Vector3::new(0.0, 0.0, 1.0), // direction
+        Vector3::new(0.0, 1.0, 0.0), // up
+        std::f32::consts::PI / 2.0,  // fov
+        (0.0, 4.0)                   // near and far bounds of view
+    );
+
+    // Spheres in scene
+    let sphere  = Sphere::new(Vector3::new(0.0,0.0,0.0), 1.0);
+    //let sphere2 = Sphere::new(Vector3::new(-0.2,0.5,0.0), 0.8);
 
     let shininess = 1.0;
     // A single light source in the scene
-    let light_position = Vector3::new(0.0,1.0,-0.5);
+    let light_position = Vector3::new(0.0, 1.0, -1.0);
 
     // Colors used:
-    let sphere_diffuse      = Vector3::new(0.0,0.6,0.8); // light blue?
-    let sphere_specular     = Vector3::new(1.0,0.0,0.0); // red
-    let background_color    = Vector3::new(0.0,0.0,0.0); // black
+    let sphere_diffuse      = Vector3::new(0.0, 0.6, 0.8); // light blue?
+    let sphere_specular     = Vector3::new(1.0, 0.0, 0.0); // red
+    let background_color    = Vector3::new(0.0, 0.0, 0.0); // black
 
     // Render:
     let image = ImgBuffer16::from_fn(width as u32, height as u32, |ix, iy| {
 
-        // Calculate image plane coordinates x,y (so that they're in [-1, 1])
-        let y: f32 = (iy as f32 / height as f32) * 2.0 - 1.0;  
+        // Calculate image plane coordinates x,y so that they're in [-1, 1]
         let x: f32 = (ix as f32 / width  as f32) * 2.0 - 1.0;  
+        let y: f32 = (iy as f32 / height as f32) * 2.0 - 1.0;  
+        let ray = camera.shoot_at(x, y);
 
-        // TODO Google this z-formula; smth to do with fov and trigonometry
-        let z = 1.0 / f32::tan(angle / 2.0);
+        let shade = |t, normal| {
+            // Run the raytracing: 
+            // TODO Feed the scene to a function for intersecting recursively
+            // for n iterations or until intersection returns None. Ray
+            // direction is the reflection and ray origin is the intersection
+            // point
+            //let iterations = 2;
+            //let mut color = background_color;
 
-        // Generate ray from camera to the image plane.
-        // NOTE this is not a general form, as the camera now has hardcoded
-        // horizontal = (1,0,0), up = (0,1,0), direction =  (0,0,1).
-        let direction = Vector3::new(x, y, z).normalized();
-
-        let ray = Ray::new(focal_point, direction);
-        
-        let color = if let Some((t, normal)) = sphere.intersect(&ray, zbs) {
             // Shade the pixel on sphere (light position == (0,1,-.5)):
-
             let surface_to_light = (light_position - ray.cast(t))
                                    .normalized();
 
@@ -66,8 +65,8 @@ pub fn run(mut args: Args) -> Result<(), String> {
 
             // Specular shading: 
             let reflection = (normal * surface_to_light.dot(normal) * 2.0
-                    - surface_to_light)
-                    .normalized();
+                             - surface_to_light)
+                             .normalized();
             let specular_amount = reflection.dot(-ray.direction())
                                     .clamp(0.0, 1.0)
                                     .powf(shininess);
@@ -75,7 +74,24 @@ pub fn run(mut args: Args) -> Result<(), String> {
             background_color 
             + (sphere_diffuse * diffuse_amount)
             + (sphere_specular * specular_amount)
+        };
+        
+        let mut the_intersects = vec![];
+        if let Some(intersection) = sphere.intersect(&ray, camera.bounds()) {
+            the_intersects.push(intersection);
+        }
+//        if let Some(intersection) = sphere2.intersect(&ray, zbs) {
+//            the_intersects.push(intersection);
+//        }
 
+        // Select the closest intersection for rendering
+        let closest = the_intersects.iter().fold((None, f32::MAX), 
+            |(opt,min_t), elem| 
+            if elem.0 < min_t { (Some(elem), elem.0) } else { (opt, min_t) }
+        ).0;
+
+        let color = if let Some(&(t, normal)) = closest {
+            shade(t, normal)
         } else {
             // Shade the pixel on background
             background_color
@@ -89,4 +105,44 @@ pub fn run(mut args: Args) -> Result<(), String> {
     image.save("raycast_sphere.png").unwrap(); // TODO Handle error-result
 
     Ok(())
+}
+
+struct PerspectiveCamera {
+    position: Vector3,
+    direction: Vector3,
+    horizontal: Vector3,
+    up: Vector3,
+    fov: f32,
+    view_bounds: (f32, f32), // Range where 0 represents the CAMERA POSITION
+}
+impl PerspectiveCamera {
+    pub fn new(position: Vector3, direction: Vector3, up: Vector3,
+               fov: f32, view_bounds: (f32, f32)) 
+        -> Self 
+    {
+        let direction  = direction.normalized();
+        let horizontal = Vector3::cross(direction, up).normalized(); 
+        let up         = Vector3::cross(horizontal, direction).normalized(); 
+        PerspectiveCamera {
+            position,
+            direction,
+            horizontal,
+            up,
+            fov,
+            view_bounds
+        }
+    }
+    pub fn shoot_at(&self, x: f32, y: f32) -> Ray {
+        // NOTE This assumes that x and y have been scaled into [-1, 1]
+        let z = 1.0 / f32::tan(self.fov / 2.0);
+
+        // Generate ray from camera to the image plane.
+        let ray_direction = (self.horizontal * x
+                            + self.up * y
+                            + self.direction * z)
+                            .normalized();
+
+        Ray::new(self.position, ray_direction)
+    }
+    pub fn bounds(&self) -> (f32, f32) { self.view_bounds }
 }
