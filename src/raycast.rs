@@ -3,8 +3,8 @@ mod objects; // is this called a re-export?
 mod vector3; // is this called a re-export?
 
 use crate::raycast::{ // is there a better way?
-    general::{color, PerspectiveCamera, Intersection, Ray},
-    objects::{Sphere, Scene},
+    general::{color::{self, Color}, PerspectiveCamera, Intersection, Ray},
+    objects::{Sphere, Scene, Light},
     vector3::Vector3,
 };
 
@@ -30,22 +30,32 @@ pub fn run(mut args: Args) -> Result<(), String> {
     );
 
     // Make a scene
-    let scene = Scene::from(vec![
-            Sphere::new(Vector3::new( 0.5,-0.3, 0.2), 0.5),
-            Sphere::new(Vector3::new(-0.5,-0.5, 0.2), 0.3),
-            Sphere::new(Vector3::new( 0.0, 0.5, 0.0), 0.4),
-        ]
+    let scene = Scene::from(
+        color::consts::BLACK,
+        vec![
+            Sphere::new(Vector3::new( 0.4,-0.2, 0.2), 0.5),
+            Sphere::new(Vector3::new(-0.5,-0.5, 0.4), 0.3),
+            Sphere::new(Vector3::new(-0.3, 0.5, 0.0), 0.4),
+        ],
+        // FIXME changing light positions seems to have no
+        // effect on amount of light
+        vec![
+            Light {
+                position: Vector3::new(0.0, 0.0,-1.0),
+                _direction: None,
+                color: Color::new(0.8, 0.8, 0.8),
+            },
+            Light {
+                position: Vector3::new(-1.5,-0.5, 4.0),
+                _direction: None,
+                color: Color::new(0.0, 0.8, 0.4),
+            },
+        ],
     );
 
-    // FIXME set this to 0.0 and go study some more
-    let shininess = 4.0;
-    // A single light source in the scene
-    //FIXME increasing distance amplifies the light
-    let light_position = Vector3::new(0.0, 1.0,-1.0);
 
-    // Colors used:
-    let specular         = color::consts::WHITE;
-    let background_color = color::consts::BLACK;
+    // Amount of times to trace reflections:
+    let reflection_count = 1;
 
     // Render:
     let image = ImgBuffer16::from_fn(width as u32, height as u32, |ix, iy| {
@@ -55,52 +65,8 @@ pub fn run(mut args: Args) -> Result<(), String> {
         let y: f32 = (iy as f32 / height as f32) * 2.0 - 1.0;  
         let ray = camera.shoot_at(x, y);
 
-        let shade = |intersection: Intersection| {
-            // Run the raytracing: 
-            // TODO Feed the scene to a function for intersecting recursively
-            // for n iterations or until intersection returns None. Ray
-            // direction is the reflection and ray origin is the intersection
-            // point
-            // Shade the pixel on sphere
-            // FIXME tracing not working (because not actually "recursive"?)
-            (0..1).fold((intersection, background_color), |(intr, col), _| {
-                let normal = intr.normal;
-                let surface_to_light = (light_position - intr.point)
-                                       .normalized();
-
-                // Diffuse shading:
-                let diffuse_amount = surface_to_light.dot(normal)
-                                     .max(0.0);
-
-                // Specular shading: 
-                //TODO Is refl normalized after operation? (see wikipedia ^R)
-                let reflection = normal * surface_to_light.dot(normal) * 2.0
-                                 - surface_to_light;
-                let specular_amount = reflection.dot(-ray.direction())
-                                      .max(0.0)
-                                      .powf(shininess);
-
-                let next_ray = Ray::new(intr.point, reflection);
-                let next_inter = scene.intersect(&next_ray, 0.0);
-                if let Some(intr2) = next_inter {
-                    let matcol = intr.material.color;
-                    (intr2, col + (matcol * diffuse_amount)
-                    + (specular * specular_amount))
-                } else {
-                    let matcol = intr.material.color;
-                    (intr, col + (matcol * diffuse_amount)
-                    + (specular * specular_amount))
-                }
-            }).1
-        };
-        
-        // Select the closest intersection for rendering
-        let color = match scene.intersect(&ray, camera.bounds().0) {
-            Some(intersection) => shade(intersection),
-            _ => background_color // Shade the pixel on background
-        };
-
-        color.into()
+        // Shade the pixel with RGB color
+        shade(&scene, &ray, reflection_count).into()
 
     });
 
@@ -108,4 +74,65 @@ pub fn run(mut args: Args) -> Result<(), String> {
     image.save("raycast_sphere.png").unwrap(); // TODO Handle error-result
 
     Ok(())
+}
+
+/// Recursive function that traces the ray `n` times
+fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color
+{
+    // Recursion end
+    if n <= 0 { return scene.ambient_color() }
+
+    //TODO Is a reflection normalized by default? (see wikipedia ^R)
+    let reflect = |d: Vector3, n: Vector3| -> Vector3 {
+        (n * 2.0 * d.dot(n) - d) // wikipedia.phong_reflection_model
+        .normalized()
+    };
+
+    // Phong reflection; color is the sum of diffuse and specular by lights
+    let phong = |intr: Intersection, lights: &Vec<Light>| -> Color {
+        // FIXME set this to 0.0 and decide go study some more
+        let shininess = 3.0; // TODO Move this into Material?
+
+        // TODO choose proper starting color: black, ambient or what?
+        lights.iter().fold(scene.ambient_color(), |acc, light| {
+            // NOTE this might not meet "the standards"
+            let specular = light.color;
+
+            let normal = intr.normal;
+            let surface_to_light = (light.position - intr.point)
+                                   .normalized();
+
+            // Diffuse shading:
+            let diffuse_amount = surface_to_light.dot(normal)
+                                 .max(0.0);
+
+            // Specular shading:
+            let reflection = reflect(surface_to_light, normal);
+            let specular_amount = reflection.dot(-ray.direction())
+                                  .max(0.0)
+                                  .powf(shininess);
+
+            acc
+            + (intr.material.color * diffuse_amount)
+            + (specular * specular_amount)
+        })
+    };
+
+    // TODO Where to store min_t?
+    match scene.intersect(&ray, 0.0) {
+        // Shade with reflections in the scene
+        Some (intersection) => {
+            let reflected_ray = Ray::new(
+                intersection.point,
+                reflect(intersection.point.normalized(), intersection.normal)
+            );
+
+            // Recursive call
+            // FIXME tracing not working because not properly "recursive"?
+            return phong(intersection, &scene.lights())
+                   + shade(&scene, &reflected_ray, n-1)
+        },
+        // Shade with ambient color
+        _ => scene.ambient_color()
+    }
 }

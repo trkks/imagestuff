@@ -56,8 +56,8 @@ impl Intersect for Sphere {
 
 /// A collection of objects
 pub struct Scene {
-    _ambient_color: Vector3,
-    _lights: Vec<Vector3>,
+    ambient_color: color::Color,
+    lights: Vec<Light>,
     spheres: Vec<Sphere>,
 }
 impl Scene {
@@ -70,11 +70,25 @@ impl Scene {
             // Select the intersection closest to ray
             .reduce(|acc, x| if x.t < acc.t { x } else { acc })
     }
-    pub fn from(spheres: Vec<Sphere>) -> Self {
+    pub fn from(ambient_color: color::Color,
+                spheres: Vec<Sphere>, lights: Vec<Light>) -> Self {
         Scene {
-            _ambient_color: Vector3::new(0.0, 0.0, 0.0),
-            _lights: vec![],
+            ambient_color,
+            lights,
             spheres,
         }
     }
+    pub fn lights(&self) -> &Vec<Light> {
+        &self.lights
+    }
+    pub fn ambient_color(&self) -> color::Color {
+        self.ambient_color
+    }
 }
+
+pub struct Light {
+    pub position: Vector3,
+    pub _direction: Option<Vector3>,
+    pub color: color::Color,
+}
+

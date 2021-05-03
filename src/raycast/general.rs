@@ -8,11 +8,11 @@ pub struct PerspectiveCamera {
     horizontal: Vector3,
     up: Vector3,
     fov: f32,
-    view_bounds: (f32, f32), // Range where 0 represents the CAMERA POSITION
+    _view_bounds: (f32, f32), // Range where 0 represents the CAMERA POSITION
 }
 impl PerspectiveCamera {
     pub fn new(position: Vector3, direction: Vector3, up: Vector3,
-               fov: f32, view_bounds: (f32, f32)) 
+               fov: f32, _view_bounds: (f32, f32))
         -> Self 
     {
         let direction  = direction.normalized();
@@ -24,7 +24,7 @@ impl PerspectiveCamera {
             horizontal,
             up,
             fov,
-            view_bounds
+            _view_bounds
         }
     }
     pub fn shoot_at(&self, x: f32, y: f32) -> Ray {
@@ -39,7 +39,6 @@ impl PerspectiveCamera {
 
         Ray::new(self.position, ray_direction)
     }
-    pub fn bounds(&self) -> (f32, f32) { self.view_bounds }
 }
 
 
@@ -102,7 +101,7 @@ pub mod color {
     #[derive(Copy,Clone,Debug)]
     pub struct Color(Vector3);
     impl Color {
-        const fn new(r: f32, g: f32, b: f32) -> Self {
+        pub const fn new(r: f32, g: f32, b: f32) -> Self {
             Color(Vector3 { x:r, y:g, z:b })
         }
     }
