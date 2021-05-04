@@ -32,9 +32,9 @@ impl PerspectiveCamera {
         let z = 1.0 / f32::tan(self.fov / 2.0);
 
         // Generate ray from camera to the image plane.
-        let ray_direction = self.horizontal * x
-                            + self.up * y
-                            + self.direction * z
+        let ray_direction =   x * self.horizontal
+                            + y * self.up
+                            + z * self.direction
                             - self.position;
 
         Ray::new(self.position, ray_direction)
@@ -71,7 +71,7 @@ impl Intersection {
         Intersection {
             t,
             point,
-            normal,
+            normal: normal.normalized(),
             material
         }
     }
@@ -95,11 +95,14 @@ pub mod color {
         pub const RED:   Color = Color::new(1.0, 0.0, 0.0);
         pub const GREEN: Color = Color::new(0.0, 1.0, 0.0);
         pub const BLUE:  Color = Color::new(0.0, 0.0, 1.0);
+        pub const NEON_PINK: Color = Color::new(1.0, 0.43, 0.78);
     }
 
     /// Newtype to have some vector operations on a separate Color type
     #[derive(Copy,Clone,Debug)]
     pub struct Color(Vector3);
+    // TODO Maybe actually do not implement color (components in range [0, 1])
+    // as a newtype from vector :)?
     impl Color {
         pub const fn new(r: f32, g: f32, b: f32) -> Self {
             Color(Vector3 { x:r, y:g, z:b })
@@ -126,6 +129,13 @@ pub mod color {
         type Output = Self;
         fn add(self, other: Color) -> Self::Output {
             Color(self.0 + other.0)
+        }
+    }
+    impl std::ops::AddAssign<&Color> for Color {
+        fn add_assign(&mut self, other: &Color) {
+            self.0.x += other.0.x;
+            self.0.y += other.0.y;
+            self.0.z += other.0.z;
         }
     }
 }

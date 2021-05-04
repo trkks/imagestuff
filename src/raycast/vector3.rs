@@ -34,6 +34,12 @@ impl std::ops::Mul<f32> for Vector3 {
         Vector3::new(self.x * c, self.y * c, self.z * c)
     }
 }
+impl std::ops::Mul<Vector3> for f32 {
+    type Output = Vector3;
+    fn mul(self, v: Vector3) -> Self::Output {
+        v * self
+    }
+}
 impl std::ops::Add for Vector3 {
     type Output = Self;
     fn add(self, other: Self) -> Self::Output {

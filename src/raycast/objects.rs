@@ -9,11 +9,11 @@ pub struct Sphere {
     material: Material,
 }
 impl Sphere {
-    pub fn new(origin: Vector3, radius: f32) -> Self {
+    pub fn new(origin: Vector3, radius: f32, material: Material) -> Self {
         Sphere { 
             origin, 
             radius, 
-            material: Material { color: color::consts::RED }
+            material,
         }
     }
 }
@@ -40,6 +40,7 @@ impl Intersect for Sphere {
 
         // Check that the intersection is greater than minimum and select the
         // intersection closest to ray origin
+        // TODO Is this tmin float-comparison accurate enough?
         let opt = if tmin <= t1 && t1 < t2 { Some(t1) } 
             else if  tmin <= t2 && t2 < t1 { Some(t2) } 
             else { None };
@@ -90,5 +91,21 @@ pub struct Light {
     pub position: Vector3,
     pub _direction: Option<Vector3>,
     pub color: color::Color,
+    pub intensity: f32,
 }
+impl Light {
+    /// Scales the light's intensity relative to a target's position
+    //TODO This might very well be stupid
+    pub fn color_to_target(&self, target_pos: Vector3) -> color::Color {
+        let to_target = target_pos - self.position;
+        // Normalize to lights intensity or in other words "range"
+        let mut factor = self.intensity / to_target.length(); // NOTE x / 0
+        if let Some(_dir) = self._direction {
+            // Scale with relation to direction's "cone" (eg. dead-on => max)
+            //TODO if angle between direction and to_target is small => max
+            factor *= 1.0;
+        }
 
+        self.color * factor
+    }
+}
