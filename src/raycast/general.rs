@@ -2,6 +2,7 @@ use crate::raycast::{
     vector3::Vector3,
 };
 
+#[derive(Debug)]
 pub struct PerspectiveCamera {
     position: Vector3,
     direction: Vector3,
@@ -11,13 +12,15 @@ pub struct PerspectiveCamera {
     _view_bounds: (f32, f32), // Range where 0 represents the CAMERA POSITION
 }
 impl PerspectiveCamera {
-    pub fn new(position: Vector3, direction: Vector3, up: Vector3,
-               fov: f32, _view_bounds: (f32, f32))
-        -> Self 
-    {
+    pub fn new(position: Vector3, 
+               direction: Vector3,
+               up: Vector3,
+               fov: f32,
+               _view_bounds: (f32, f32)) -> Self {
         let direction  = direction.normalized();
         let horizontal = Vector3::cross(direction, up).normalized(); 
         let up         = Vector3::cross(horizontal, direction).normalized(); 
+
         PerspectiveCamera {
             position,
             direction,
@@ -31,7 +34,7 @@ impl PerspectiveCamera {
         // NOTE This assumes that x and y have been scaled into [-1, 1]
         let z = 1.0 / f32::tan(self.fov / 2.0);
 
-        // Generate ray from camera to the image plane.
+        // Generate ray from camera to the image plane
         let ray_direction =   x * self.horizontal
                             + y * self.up
                             + z * self.direction
@@ -48,7 +51,7 @@ pub struct Ray {
 }
 impl Ray {
     pub fn new(origin: Vector3, direction: Vector3) -> Self {
-        // TODO Normalize direction?
+        // TODO Make normalized direction an invariant of Ray
         Ray { origin, direction: direction }   
     }
     pub fn origin(&self) -> Vector3 { self.origin }
@@ -101,21 +104,21 @@ pub mod color {
     /// Newtype to have some vector operations on a separate Color type
     #[derive(Copy,Clone,Debug)]
     pub struct Color(Vector3);
-    // TODO Maybe actually do not implement color (components in range [0, 1])
-    // as a newtype from vector :)?
+    // TODO Find out if colors should not be represented as just 3D vectors 
     impl Color {
         pub const fn new(r: f32, g: f32, b: f32) -> Self {
             Color(Vector3 { x:r, y:g, z:b })
         }
     }
-    impl From<Color> for Vector3 { 
-        fn from(c: Color) -> Self {
-            c.0
-        }
-    }
+
     impl From<Color> for Rgb<u16> { 
         fn from(c: Color) -> Self {
-            Self::from(c.0)
+            let (r,g,b) = (c.0.x, c.0.y, c.0.z);
+            Rgb(
+                [ (r * (u16::MAX as f32)) as u16,
+                  (g * (u16::MAX as f32)) as u16,
+                  (b * (u16::MAX as f32)) as u16 ]
+            )
         }
     }
 

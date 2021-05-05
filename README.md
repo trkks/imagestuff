@@ -15,5 +15,5 @@ but could now be better suited for low-to-no-control superimposement of images
 Does some shifty stuff with an images pixels; throwaway.
 
 ### raycast
-Makes an image that contains a sphere. Sphere made with code translated from
-an old university course assignment.
+Makes an image that contains a scene with reflective spheres. (Based on code
+translated from an old university course assignment)

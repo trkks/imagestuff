@@ -1,5 +1,3 @@
-use image::Rgb;
-
 #[derive(Copy,Clone,Debug)]
 pub struct Vector3 {
     pub x: f32,
@@ -56,14 +54,5 @@ impl std::ops::Neg for Vector3 {
     type Output = Self;
     fn neg(self) -> Self::Output {
         Vector3::new(-self.x, -self.y, -self.z)
-    }
-}
-impl From<Vector3> for Rgb<u16> {
-    fn from(v: Vector3) -> Self { 
-        Rgb(
-            [ (v.x.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
-              (v.y.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
-              (v.z.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16 ]
-        )
     }
 }

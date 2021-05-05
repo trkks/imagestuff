@@ -21,9 +21,9 @@ impl Intersect for Sphere {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         // Calculate the items for quadratic formula
         let to_ray_origin = ray.origin() - self.origin;
-        // NOTE `a` could be just 1.0 if ray.direction is normalized
+        // NOTE `a` is just 1.0 as ray.direction should be normalized
         let (a, b, c) = (
-            ray.direction().dot(ray.direction()),
+            1.0,
             2.0 * ray.direction().dot(to_ray_origin),
             to_ray_origin.dot(to_ray_origin) - self.radius.powi(2)
         );
