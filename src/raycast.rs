@@ -2,62 +2,45 @@ mod general; // is this called a re-export?
 mod objects; // is this called a re-export?
 mod vector3; // is this called a re-export?
 
+use crate::utils;
 use crate::raycast::{ // is there a better way?
-    general::{color::{self, Color}, PerspectiveCamera, Ray, Material},
-    objects::{Sphere, Scene, Light},
+    general::{color::{self, Color}, PerspectiveCamera, Ray},
+    objects::Scene,
     vector3::Vector3,
 };
 
 use std::env::{Args};
+use std::io::{Read};
+use std::fs::{File};
 use image::{ImageBuffer, Rgb};
+use serde_json;
 
 type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
 
 pub fn run(mut args: Args) -> Result<(), String> {
+    // Load view from file
+    let filepath = match args.next() {
+        Some(fp) => fp,
+        None => {
+            eprintln!(
+                "Need a path to json file describing the view to be rendered");
+            std::process::exit(1);
+        }
+    };
+    let (camera, scene) = match scene_from_json(&filepath) {
+        Ok(val) => val,
+        Err(e) => {
+            eprintln!("Error in loading objects - {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Image bounds
     let (width, height) = match (args.next(), args.next()) {
         (Some(a),None   ) => (a.parse().unwrap(),a.parse().unwrap()),
         (Some(a),Some(b)) => (a.parse().unwrap(),b.parse().unwrap()),
         _                 => (128, 128),
     };
-
-    // Using the right hand rule/basis idk
-    let camera = PerspectiveCamera::new(
-        Vector3::new(0.0, 0.0,-1.0), // position
-        Vector3::new(0.0, 0.0, 1.0), // direction
-        Vector3::new(0.0, 1.0, 0.0), // up FIXME Why is this "reversed" :/?
-        std::f32::consts::PI / 2.0,  // fov
-        (0.0, f32::MAX)              // near and far bounds of view
-    );
-
-    // Make a scene TODO Parse from external source
-    let scene = Scene::from(
-        color::consts::BLACK,
-        vec![
-            Sphere::new(Vector3::new( 0.45,-0.30, 1.4), 0.5,
-                 Material { color: color::consts::RED }),
-            Sphere::new(Vector3::new(-0.25,-0.35, 0.6), 0.3,
-                 Material { color: color::consts::GREEN }),
-            Sphere::new(Vector3::new(-0.20, 0.40, 1.0), 0.4,
-                 Material { color: color::consts::BLUE }),
-        ],
-        vec![
-            // This light casts the shadow of green sphere onto red sphere
-            Light {
-                position:  Vector3::new(-0.75,-0.35,-1.4),
-                _direction: None,
-                color: color::consts::WHITE,
-                intensity: 1.0,
-            },
-            Light {
-                position: Vector3::new( 0.5, 1.5, 3.0),
-                _direction: None,
-                color: color::consts::NEON_PINK,
-                intensity: 2.0,
-            },
-        ],
-    );
-
 
     // Amount of times to trace reflections:
     let reflection_count = 6;
@@ -76,9 +59,26 @@ pub fn run(mut args: Args) -> Result<(), String> {
     });
 
     // Write to image file
-    image.save("raycast_sphere.png").unwrap(); // TODO Handle error-result
+    let result_file = format!("{}.png", utils::filename(&filepath));
+    image.save(result_file).unwrap(); // TODO Handle error-result
 
     Ok(())
+}
+
+type ParseResult = Result<(PerspectiveCamera, Scene), String>;
+fn scene_from_json(filepath: &str) -> ParseResult {
+    let mut file = File::open(filepath)
+        .map_err(|e| format!("Failure to open file: {}", e))?;
+    let mut contents = String::from("");
+    file.read_to_string(&mut contents)
+        .map_err(|e| format!("Failure to read file: {}", e))?;
+
+    let (camera, scene) = serde_json::from_str(&contents)
+        .map_err(|e| format!("Failure to parse: {}", e))?;
+
+    let camera = PerspectiveCamera::from(camera);
+
+    Ok((camera, scene))
 }
 
 /// Recursive function that traces the ray `n` times

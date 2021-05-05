@@ -1,4 +1,4 @@
-#[derive(Copy,Clone,Debug)]
+#[derive(serde::Deserialize, Copy,Clone,Debug)]
 pub struct Vector3 {
     pub x: f32,
     pub y: f32,

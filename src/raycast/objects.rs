@@ -2,16 +2,53 @@ use crate::raycast::{
     general::{Material, Intersect, Intersection, Ray, color},
     vector3::Vector3,
 };
+use serde;
 
+/// A collection of objects
+#[derive(serde::Deserialize)]
+pub struct Scene {
+    ambient_color: color::Color,
+    lights: Vec<Light>,
+    spheres: Vec<Sphere>,
+}
+impl Scene {
+    pub fn intersect(&self, ray: &Ray, tmin: f32)
+        -> Option<Intersection>
+    {
+        self.spheres.iter()
+            // Intersect the objects
+            .filter_map(|sphere| sphere.intersect(&ray, tmin))
+            // Select the intersection closest to ray
+            .reduce(|acc, x| if x.t < acc.t { x } else { acc })
+    }
+    #[allow(dead_code)]
+    pub fn new(ambient_color: color::Color,
+                spheres: Vec<Sphere>, lights: Vec<Light>) -> Self {
+        Scene {
+            ambient_color,
+            lights,
+            spheres,
+        }
+    }
+    pub fn lights(&self) -> &Vec<Light> {
+        &self.lights
+    }
+    pub fn ambient_color(&self) -> color::Color {
+        self.ambient_color
+    }
+}
+
+#[derive(serde::Deserialize)]
 pub struct Sphere {
     origin: Vector3,
     radius: f32,
     material: Material,
 }
 impl Sphere {
+    #[allow(dead_code)]
     pub fn new(origin: Vector3, radius: f32, material: Material) -> Self {
         Sphere { 
-            origin, 
+            origin,
             radius, 
             material,
         }
@@ -55,38 +92,7 @@ impl Intersect for Sphere {
     }
 }
 
-/// A collection of objects
-pub struct Scene {
-    ambient_color: color::Color,
-    lights: Vec<Light>,
-    spheres: Vec<Sphere>,
-}
-impl Scene {
-    pub fn intersect(&self, ray: &Ray, tmin: f32) 
-        -> Option<Intersection>
-    {
-        self.spheres.iter()
-            // Intersect the objects
-            .filter_map(|sphere| sphere.intersect(&ray, tmin))
-            // Select the intersection closest to ray
-            .reduce(|acc, x| if x.t < acc.t { x } else { acc })
-    }
-    pub fn from(ambient_color: color::Color,
-                spheres: Vec<Sphere>, lights: Vec<Light>) -> Self {
-        Scene {
-            ambient_color,
-            lights,
-            spheres,
-        }
-    }
-    pub fn lights(&self) -> &Vec<Light> {
-        &self.lights
-    }
-    pub fn ambient_color(&self) -> color::Color {
-        self.ambient_color
-    }
-}
-
+#[derive(serde::Deserialize)]
 pub struct Light {
     pub position: Vector3,
     pub _direction: Option<Vector3>,

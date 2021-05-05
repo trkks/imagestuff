@@ -1,0 +1,44 @@
+[
+    {
+        "position":   [0, 0,-1],
+        "direction":  [0, 0, 1],
+        "horizontal": [0, 0, 0],
+        "up": [0,-1, 0],
+        "fov": 90,
+        "view_bounds": [0, 50]
+    },
+    {
+        "ambient_color": [0,0,0],
+        "spheres": [
+            {
+                "origin": [0.45,-0.30, 1.4],
+                "radius": 0.5,
+                "material": { "color": [1,0,0] }
+            },
+            {
+                "origin": [-0.25, -0.35, 0.6],
+                "radius": 0.3,
+                "material": { "color": [0,1,0] }
+            },
+            {
+                "origin": [-0.20, 0.40, 1.0],
+                "radius": 0.4,
+                "material": { "color": [0,0,1] }
+            }
+        ],
+        "lights": [
+            {
+                "position": [-0.75,-0.35,-1.4],
+                "direction": [],
+                "color": [0,0,0],
+                "intensity": 1.0
+            },
+            {
+                "position": [0.5, 1.5, 3.0],
+                "direction": [],
+                "color": [1,0.43,0.78],
+                "intensity": 2.0
+            }
+        ]
+    }
+]
