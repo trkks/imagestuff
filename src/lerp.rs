@@ -47,9 +47,7 @@ pub fn run(args: env::Args) -> Result<(), String> {
 
 // Generate an image that's halfway faded between two images
 fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
-    if !utils::confirm_dir("pics") {
-        return Err(format!("Directory not found"));
-    }
+    utils::confirm_dir("pics")?;
 
     // Read image from file
     let (img1, img2) = (utils::open_decode(file1)?.into_rgb16(),
@@ -81,7 +79,7 @@ fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
     }
 
     let newfile = format!("./pics/lerp_{}_{}.png",
-                          utils::filename(file1), utils::filename(file2));
+                          utils::filename(file1)?, utils::filename(file2)?);
     println!("\nSaving to {}", &newfile);
 
     // Save transformed image as a new file

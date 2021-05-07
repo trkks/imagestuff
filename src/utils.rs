@@ -9,7 +9,7 @@ use image::{Rgb, DynamicImage};
 ///
 /// # Example:
 /// ```
-/// let mut progress = ProgessBar::new(1000, 15);
+/// let mut progress = ProgressBar::new(1000, 15);
 /// progress.set_title("Amount of work done");
 /// for _ in range(0..1000) {
 ///     // -- do work --
@@ -46,10 +46,22 @@ impl ProgressBar {
     /// the bar, it is printed to stdout for reflecting this new state
     pub fn print_update(&mut self) -> IOResult<()> {
         if self.update() {
-            self.print()?
+            self.print(None)?
         }
         Ok(())
     }
+
+    /// Same as `print_update` but specify the terminal row to which position
+    /// the bar.
+    /// Note that the environment must work with some ANSI escape sequences (see
+    /// https://tldp.org/HOWTO/Bash-Prompt-HOWTO/x361.html).
+    pub fn print_update_row(&mut self, row: usize) -> IOResult<()> {
+        if self.update() {
+            self.print(Some(row))?
+        }
+        Ok(())
+    }
+
 
     /// Change the title shown next to the progress bar
     pub fn title(&mut self, title: &str) {
@@ -68,65 +80,78 @@ impl ProgressBar {
         return false
     }
 
-    fn print(&mut self) -> IOResult<()> {
-        let prefix = format!("\r{} [", self.title);
-        self.out.write(prefix.as_bytes()).map(|_| ())?;
-        self.out.write(self.bar.as_slice()).map(|_| ())?;
-        let progressed = self.bar.iter().rposition(|x| *x == '=' as u8)
-                                        .unwrap_or(0) + 1;
-        if progressed < self.bar.len() {
-            self.out.write(b"]").map(|_| ())?;
+    fn print(&mut self, row: Option<usize>) -> IOResult<()> {
+        // Choose current prefix based on if cursor should be moved to a row
+        let prefix = match row {
+            Some(r) => format!("\x1b[{};0f\r{} [", r, self.title),
+            None    => format!("\r{} [", self.title),
+        };
+        let prefix = prefix.as_bytes();
+
+        // Flag to choose the right suffix based on the bar being full or not
+        let bar_progress = self.bar.iter().rposition(|x| *x == '=' as u8)
+                                          .unwrap_or(0) + 1;
+        let bar_full = self.bar.len() <= bar_progress;
+
+        // Create a vec for the bytes to be written
+        let mut bytes = vec![];
+                   // bar            + prefix       +"] Done!"
+        bytes.reserve(self.bar.len() + prefix.len() + 7);
+
+        // Add the correct bytes in order
+        bytes.extend(prefix);
+        bytes.extend(self.bar.as_slice());
+        if bar_full {
+            bytes.extend(b"] Done!");
         } else {
-            self.out.write(b"] Done!").map(|_| ())?;
+            bytes.extend(b"]")
         }
-        self.out.flush()
+
+        // Write into stdout
+        // NOTE Stdout needs to be locked for the write operations
+        let mut handle = self.out.lock();
+        handle.write(bytes.as_slice())?;
+        handle.flush()
     }
 }
 
 // Utility for loading an image from filepath into a DynamicImage
 pub fn open_decode(file: &str) -> Result<DynamicImage, String> {
     println!("Loading image {}", &file);
-    match ImageReader::open(&file) {
-        Ok(reader) => reader.decode().map_err(|e| e.to_string()), 
-        Err(msg)   => Err(format!("{}", msg)),
-    }
+    ImageReader::open(&file)
+        .map_err(|e| e.to_string())?
+        .decode()
+        .map_err(|e| e.to_string())
 }
 
 // If dirname directory does not exists under current directory, prompt to
 // create it. Return True if exists or created
-pub fn confirm_dir(dirname: &str) -> bool {
-    let dir = format!(".\\{}\\", dirname);
-    // Ebin :DD
-    std::path::Path::new(&dir).exists() || {
-        print!("Directory `{}` not found. Create it [y/n]? ", dir);
-        std::io::stdout().flush().unwrap();
+pub fn confirm_dir(dirname: &str) -> Result<(), String> {
+    let dir = dirname;
+
+    if !std::path::Path::new(&dir).exists() {
+        print!("Directory `{}` not found. Create it [y/N]? ", dir);
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
         let mut answer = String::new();
         if let Ok(_) = std::io::stdin().read_line(&mut answer) {
             if answer.starts_with("y") {
-                std::fs::create_dir(dir).unwrap();
-                return true
+                return std::fs::create_dir(dir).map_err(|e| e.to_string())
             }
         }
-        false
+        return Err(format!("Directory not found"))
     }
+
+    Ok(())
 }
 
 // Remove file extension and directory path from input string
-pub fn filename(file: &str) -> &str {
-    let isuff = match file.rfind('.') { 
-        Some(i) => i, 
-        None => file.len(),
-    };
-    let ipref = match file.rfind('\\') {
-        Some(i) => i,
-        None => 0,
-    };
-    // NOTE Cannot(?) crash here at runtime due to variable-byte-length
-    // indexing, because the indices are found with the standard library
-    // functions.
-    // ie. String slices should be used with caution, because it
-    // means indexing into variable-byte-length sequences (UTF8)!
-    &file[ipref+1..isuff]
+pub fn filename(file: &str) -> Result<&str,String> {
+    if let Some(name) = std::path::Path::new(file).file_stem() {
+        if let Some(s) = name.to_str() {
+            return Ok(s)
+        }
+    }
+    Err(format!("Bad filename: {}",file))
 }
 
 // Get ascii character that looks like the brightness of the pixel

@@ -41,9 +41,7 @@ pub fn run(args: env::Args) -> Result<(), String> {
 
 // Using ascii characters, generate a textfile representation of an image
 fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
-    if !utils::confirm_dir("ascii") {
-        return Err(format!("Directory not found"));
-    }    
+    utils::confirm_dir("ascii")?;
 
     // First open imagefile, confirming its validity
     let img = utils::open_decode(&srcfile).map_err(|e| e.to_string())?;
@@ -70,7 +68,7 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
         progress.print_update().map_err(|e| e.to_string())?; 
     } 
 
-    let newfile = format!("./ascii/{}.txt", utils::filename(srcfile));
+    let newfile = format!("./ascii/{}.txt", utils::filename(srcfile)?);
     println!("\nSaving to {}", newfile);
 
     let mut file = File::create(newfile).map_err(|e| e.to_string())?;

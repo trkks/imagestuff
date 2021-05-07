@@ -1,6 +1,10 @@
 /target
 /ascii
 /pics
+/renders
+/dump
 *.swp
+/raycast_scenes/*
+!/raycast_scenes/*.json
 *.png
 *.txt

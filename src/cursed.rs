@@ -11,9 +11,7 @@ pub fn run(mut args: env::Args) -> Result<(),String> {
     // Generate an image with every other pixel's color inverted:
 
     // Check/create output directory
-    if !utils::confirm_dir("pics") {
-        return Err(format!("Directory not found"));
-    }
+    utils::confirm_dir("pics")?;
 
     // Read image from file
     let img = utils::open_decode(&file)?.into_rgb16();
@@ -47,7 +45,7 @@ pub fn run(mut args: env::Args) -> Result<(),String> {
         progress.print_update().map_err(|e| e.to_string())?; 
     }
 
-    let newfile = format!("./pics/cursed_{}.png", utils::filename(&file));
+    let newfile = format!("./pics/cursed_{}.png", utils::filename(&file)?);
     println!("\nSaving to {}", &newfile);
 
     // Save transformed image as a new file

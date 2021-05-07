@@ -1,6 +1,6 @@
-mod general; // is this called a re-export?
-mod objects; // is this called a re-export?
-mod vector3; // is this called a re-export?
+mod general;
+mod objects;
+mod vector3;
 
 use crate::utils;
 use crate::raycast::{ // is there a better way?
@@ -18,6 +18,8 @@ use serde_json;
 type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
 
 pub fn run(mut args: Args) -> Result<(), String> {
+    utils::confirm_dir("renders")?;
+
     // Load view from file
     let filepath = match args.next() {
         Some(fp) => fp,
@@ -59,9 +61,10 @@ pub fn run(mut args: Args) -> Result<(), String> {
     });
 
     // Write to image file
-    let result_file = format!("{}.png", utils::filename(&filepath));
+    let result_file = format!("./renders/{}_{}x{}.png",
+        utils::filename(&filepath)?, width, height);
+    println!("Saving to {}", result_file);
     image.save(result_file).unwrap(); // TODO Handle error-result
-
     Ok(())
 }
 
