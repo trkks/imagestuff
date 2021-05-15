@@ -10,24 +10,33 @@ pub struct Scene {
     ambient_color: color::Color,
     lights: Vec<Light>,
     spheres: Vec<Sphere>,
+    planes: Vec<Plane>,
 }
 impl Scene {
     pub fn intersect(&self, ray: &Ray, tmin: f32)
         -> Option<Intersection>
     {
         self.spheres.iter()
-            // Intersect the objects
-            .filter_map(|sphere| sphere.intersect(&ray, tmin))
+            // Intersect the spheres
+            .filter_map(|obj| obj.intersect(&ray, tmin))
+            .chain(
+                self.planes.iter()
+                // Intersect the planes
+                .filter_map(|obj| obj.intersect(&ray, tmin))
+            )
             // Select the intersection closest to ray
             .reduce(|acc, x| if x.t < acc.t { x } else { acc })
     }
     #[allow(dead_code)]
     pub fn new(ambient_color: color::Color,
-                spheres: Vec<Sphere>, lights: Vec<Light>) -> Self {
+               spheres: Vec<Sphere>, 
+               planes: Vec<Plane>, 
+               lights: Vec<Light>) -> Self {
         Scene {
             ambient_color,
             lights,
             spheres,
+            planes,
         }
     }
     pub fn lights(&self) -> &Vec<Light> {
@@ -78,8 +87,8 @@ impl Intersect for Sphere {
         // Check that the intersection is greater than minimum and select the
         // intersection closest to ray origin
         // TODO Is this tmin float-comparison accurate enough?
-        let opt = if tmin <= t1 && t1 < t2 { Some(t1) } 
-            else if  tmin <= t2 && t2 < t1 { Some(t2) } 
+        let opt = if tmin < t1 && t1 < t2 { Some(t1) } 
+            else if  tmin < t2 && t2 < t1 { Some(t2) } 
             else { None };
 
         if let Some(t) = opt {
@@ -89,6 +98,42 @@ impl Intersect for Sphere {
         } else {
             None
         }
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct Plane {
+    origin: Vector3,
+    normal: Vector3,
+    material: Material,
+}
+impl Intersect for Plane {
+    fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
+        let denominator = ray.direction().dot(self.normal);
+
+        // This checks inequality to 0 in floating point
+        if denominator < -f32::EPSILON || f32::EPSILON < denominator {
+            // Single point of intersection
+
+            let d = -(self.normal.dot(self.origin));
+            let nominator = -(d + self.normal.dot(ray.origin()));
+            let t = nominator / denominator;
+            if tmin < t {
+                return Some(
+                    Intersection::new(
+                        t,
+                        ray.cast(t),
+                        self.normal,
+                        self.material
+                    )
+                )
+            }
+        }
+
+        // Line is parallel to plane and if contained in it, the infinitely
+        // thin plane will be invisible
+        // (or more likely, the intersection is too close)
+        None
     }
 }
 

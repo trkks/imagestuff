@@ -24,6 +24,33 @@
                 "origin": [-0.20, 0.40, 1.0],
                 "radius": 0.4,
                 "material": { "color": [0,0,1] }
+            }           
+        ],
+        "planes": [
+            {
+                "origin": [0, -8, 0],
+                "normal": [0.0, 0.7071, -0.7071],
+                "material": { "color": [0.1,0.5,0.1] }
+            },
+            {
+                "origin": [8, 0, 0],
+                "normal": [-0.7071, 0, -0.7071],
+                "material": { "color": [0.5,0.1,0.1] }
+            },
+            {
+                "origin": [0, 8, 0],
+                "normal": [0.0, -0.7071, -0.7071],
+                "material": { "color": [0.1,0.1,0.5] }
+            },
+            {
+                "origin": [-8, 0, 0],
+                "normal": [0.7071, 0, -0.7071],
+                "material": { "color": [0.5,0.1,0.1] }
+            },
+            {
+                "origin": [0, 0, 6],
+                "normal": [0, 0, -1],
+                "material": { "color": [0.85,0.85,0] }
             }
         ],
         "lights": [
@@ -38,7 +65,7 @@
                 "direction": [],
                 "color": [1,0.43,0.78],
                 "intensity": 2.0
-            }
+             }
         ]
     }
 ]

@@ -3,7 +3,7 @@ mod objects;
 mod vector3;
 
 use crate::utils;
-use crate::raycast::{ // is there a better way?
+use crate::raycast::{
     general::{color::{self, Color}, PerspectiveCamera, Ray},
     objects::Scene,
     vector3::Vector3,
@@ -91,8 +91,9 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
         Some (intersect) if n > 0 => {
             // Nudge off of the surface so that ray does not re-collide
             // (see "shadow acne")
+            // NOTE The "bias" (ie. normal * epsilon) seems hard to get right
             let off_intersect_surface = 
-                intersect.point + (intersect.normal * f32::EPSILON);
+                intersect.point + (intersect.normal * 0.0001);
 
             let color = scene.lights().iter().fold(
                 color::consts::BLACK, |acc, light| {
@@ -117,6 +118,8 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
                     )
                 } else {
                     // ignore light at this point
+                    // TODO Calculate intensity of shadow based on intersection
+                    // color's value??
                     acc
                 }
             });
