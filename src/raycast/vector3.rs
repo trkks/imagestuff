@@ -25,6 +25,10 @@ impl Vector3 {
             lhs.x*rhs.y - lhs.y*rhs.x
         )
     }
+    // NOTE d and n must be normalized before calling this
+    pub fn reflect(d: Vector3, n: Vector3) -> Vector3 {
+        d - 2.0 * d.dot(n) * n
+    }
 }
 impl std::ops::Mul<f32> for Vector3 {
     type Output = Self;

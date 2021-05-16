@@ -1,5 +1,8 @@
+/// This module contains objects that are `Intersect`
+
 use crate::raycast::{
-    general::{Material, Intersect, Intersection, Ray, color},
+    general::{color, Intersect, Intersection, Light, Material},
+    ray::Ray,
     vector3::Vector3,
 };
 use serde;
@@ -13,17 +16,16 @@ pub struct Scene {
     planes: Vec<Plane>,
 }
 impl Scene {
-    pub fn intersect(&self, ray: &Ray, tmin: f32)
-        -> Option<Intersection>
-    {
-        self.spheres.iter()
-            // Intersect the spheres
-            .filter_map(|obj| obj.intersect(&ray, tmin))
-            .chain(
-                self.planes.iter()
-                // Intersect the planes
-                .filter_map(|obj| obj.intersect(&ray, tmin))
-            )
+    pub fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
+        let spheres = self.spheres.iter()
+            .filter_map(|obj| obj.intersect(&ray, tmin));
+        let planes = self.planes.iter()
+            .filter_map(|obj| obj.intersect(&ray, tmin));
+        // TODO?
+        //let triangles = self.triangles.iter()
+        //    .filter_map(|obj| obj.intersect(&ray, tmin));
+
+        spheres.chain(planes)//.chain(triangles)
             // Select the intersection closest to ray
             .reduce(|acc, x| if x.t < acc.t { x } else { acc })
     }
@@ -108,6 +110,8 @@ pub struct Plane {
     material: Material,
 }
 impl Intersect for Plane {
+    // FIXME Something seems off; maybe replace `origin` with offset and revise
+    // formula?
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         let denominator = ray.direction().dot(self.normal);
 
@@ -134,29 +138,5 @@ impl Intersect for Plane {
         // thin plane will be invisible
         // (or more likely, the intersection is too close)
         None
-    }
-}
-
-#[derive(serde::Deserialize)]
-pub struct Light {
-    pub position: Vector3,
-    pub _direction: Option<Vector3>,
-    pub color: color::Color,
-    pub intensity: f32,
-}
-impl Light {
-    /// Scales the light's intensity relative to a target's position
-    //TODO This might very well be stupid
-    pub fn color_to_target(&self, target_pos: Vector3) -> color::Color {
-        let to_target = target_pos - self.position;
-        // Normalize to lights intensity or in other words "range"
-        let mut factor = self.intensity / to_target.length(); // NOTE x / 0
-        if let Some(_dir) = self._direction {
-            // Scale with relation to direction's "cone" (eg. dead-on => max)
-            //TODO if angle between direction and to_target is small => max
-            factor *= 1.0;
-        }
-
-        self.color * factor
     }
 }

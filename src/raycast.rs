@@ -1,10 +1,14 @@
 mod general;
 mod objects;
 mod vector3;
+mod camera;
+mod ray;
 
 use crate::utils;
 use crate::raycast::{
-    general::{color::{self, Color}, PerspectiveCamera, Ray},
+    general::color::{self, Color},
+    camera::PerspectiveCamera,
+    ray::Ray,
     objects::Scene,
     vector3::Vector3,
 };
@@ -18,7 +22,8 @@ use serde_json;
 type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
 
 pub fn run(mut args: Args) -> Result<(), String> {
-    utils::confirm_dir("renders")?;
+    let output_dir = "renders";
+    utils::confirm_dir(output_dir)?;
 
     // Load view from file
     let filepath = match args.next() {
@@ -51,8 +56,10 @@ pub fn run(mut args: Args) -> Result<(), String> {
     let image = ImgBuffer16::from_fn(width as u32, height as u32, |ix, iy| {
 
         // Calculate image plane coordinates x,y so that they're in [-1, 1]
-        let x: f32 = (ix as f32 / width  as f32) * 2.0 - 1.0;  
-        let y: f32 = (iy as f32 / height as f32) * 2.0 - 1.0;  
+        let x: f32 = ix as f32 / width  as f32 * 2.0 - 1.0;
+        // y is negated to transform from raster-space (ie. origin top left)
+        // into screen-space (origin bottom left)
+        let y: f32 = -(iy as f32 / height as f32 * 2.0 - 1.0);
         let ray = camera.shoot_at(x, y);
 
         // Shade the pixel with RGB color
@@ -61,8 +68,8 @@ pub fn run(mut args: Args) -> Result<(), String> {
     });
 
     // Write to image file
-    let result_file = format!("./renders/{}_{}x{}.png",
-        utils::filename(&filepath)?, width, height);
+    let result_file = format!("./{}/{}_{}x{}.png",
+        output_dir, utils::filename(&filepath)?, width, height);
     println!("Saving to {}", result_file);
     image.save(result_file).unwrap(); // TODO Handle error-result
     Ok(())
@@ -127,7 +134,7 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
             // Reflections: Add color seen by reflected ray to current ray
             let reflected_ray = Ray::new(
                 off_intersect_surface,
-                reflect(ray.direction(), intersect.normal)
+                Vector3::reflect(ray.direction(), intersect.normal)
             );
             // Recursive call:
             return color + shade(&scene, &reflected_ray, n-1)
@@ -154,7 +161,8 @@ fn phong(diffuse: Color,
     let diffuse_term = surface_to_light.dot(normal);
     // Specular
     let reflection = 
-        // Not same as `fn reflect` for reasons: wikipedia/specular_reflection
+        // Not same as `Vector3::reflect` for reasons:
+        // wikipedia/specular_reflection
         2.0 * surface_to_light.dot(normal) * normal - surface_to_light; 
     let specular_term = reflection.dot(to_viewer);
 
@@ -174,9 +182,4 @@ fn phong(diffuse: Color,
         } else {
             specular_term.powf(shininess)
         }
-}
-
-// NOTE d and n must be normalized before calling this
-fn reflect(d: Vector3, n: Vector3) -> Vector3 {
-    d - 2.0 * d.dot(n) * n
 }
