@@ -1,25 +1,14 @@
 use crate::raycast::{
-    vector3::Vector3,
+    vector3::{Vector3, UnitVector3},
     ray::Ray,
 };
 
+#[derive(Debug)]
 pub struct Intersection {
     pub t: f32,
     pub point: Vector3,
-    pub normal: Vector3,
+    pub normal: UnitVector3,
     pub material: Material,
-}
-impl Intersection {
-    pub fn new(t: f32, point: Vector3, normal: Vector3, material: Material) 
-        -> Self 
-    {
-        Intersection {
-            t,
-            point,
-            normal: normal.normalized(),
-            material
-        }
-    }
 }
 
 pub trait Intersect {
@@ -29,6 +18,7 @@ pub trait Intersect {
 
 // Generic name if this grows in the future
 #[derive(serde::Deserialize,Copy,Clone)]
+#[derive(Debug)]
 pub struct Material {
     pub color: color::Color,
 }

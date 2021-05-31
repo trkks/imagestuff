@@ -1,54 +1,53 @@
-[
-    {
-        "position":   [0, 0, 1],
+{
+    "camera": {
+        "position":   [0, 0, 2],
         "direction":  [0, 0,-1],
-        "horizontal": [1, 0, 0],
         "up": [0, 1, 0],
         "fov": 90,
         "view_bounds": [0, 50]
     },
-    {
+    "scene": {
         "ambient_color": [0,0,0],
         "spheres": [
             {
-                "origin": [0.45,-0.30,-1.4],
-                "radius": 0.5,
+                "origin": [0.40,-0.25,-0.9],
+                "radius": 0.4,
                 "material": { "color": [1,0,0] }
             },
             {
-                "origin": [-0.25,-0.35,-0.6],
-                "radius": 0.3,
+                "origin": [-0.30,-0.20, -0.1],
+                "radius": 0.2,
                 "material": { "color": [0,1,0] }
             },
             {
-                "origin": [-0.20, 0.40,-1.0],
-                "radius": 0.4,
+                "origin": [-0.25, 0.25,-0.7],
+                "radius": 0.3,
                 "material": { "color": [0,0,1] }
             }           
         ],
         "planes": [
             {
-                "origin": [0, -8, 0],
+                "offset": 1,
                 "normal": [0.0, 0.7071, 0.7071],
                 "material": { "color": [0.1,0.5,0.1] }
             },
             {
-                "origin": [8, 0, 0],
+                "offset": 1,
                 "normal": [-0.7071, 0, 0.7071],
-                "material": { "color": [0.5,0.1,0.1] }
+                "material": { "color": [0.2,0.2,0.2] }
             },
             {
-                "origin": [0, 8, 0],
+                "offset": 1,
                 "normal": [0.0, -0.7071, 0.7071],
                 "material": { "color": [0.1,0.1,0.5] }
             },
             {
-                "origin": [-8, 0, 0],
+                "offset": 1,
                 "normal": [0.7071, 0, 0.7071],
                 "material": { "color": [0.5,0.1,0.1] }
             },
             {
-                "origin": [0, 0,-6],
+                "offset": 0.9,
                 "normal": [0, 0, 1],
                 "material": { "color": [0.85,0.85,0] }
             }
@@ -65,7 +64,7 @@
                 "direction": [],
                 "color": [1,0.43,0.78],
                 "intensity": 1.0
-             }
+            }
         ]
     }
-]
+}

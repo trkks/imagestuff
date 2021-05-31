@@ -5,35 +5,31 @@ pub struct Vector3 {
     pub z: f32,
 }
 impl Vector3 {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
-        Vector3 { x, y, z }
+    pub fn normalized(self) -> UnitVector3 {
+        UnitVector3::from(self)
     }
-    pub fn normalized(&self) -> Self {
-        let length = self.length();
-        Vector3::new(self.x / length, self.y / length, self.z / length)
-    }
-    pub fn length(self) -> f32 {
+    pub fn length(&self) -> f32 {
         (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
     }
-    pub fn dot(&self, other: Self) -> f32 {
+    pub fn dot(&self, other: &Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
-    pub fn cross(lhs: Self, rhs: Self) -> Self {
-        Vector3::new(
-            lhs.y*rhs.z - lhs.z*rhs.y,
-            lhs.z*rhs.x - lhs.x*rhs.z,
-            lhs.x*rhs.y - lhs.y*rhs.x
-        )
-    }
-    // NOTE d and n must be normalized before calling this
-    pub fn reflect(d: Vector3, n: Vector3) -> Vector3 {
-        d - 2.0 * d.dot(n) * n
+    pub fn cross(&self, other: &Self) -> Self {
+        Vector3 {
+            x: self.y*other.z - self.z*other.y,
+            y: self.z*other.x - self.x*other.z,
+            z: self.x*other.y - self.y*other.x
+        }
     }
 }
 impl std::ops::Mul<f32> for Vector3 {
     type Output = Self;
     fn mul(self, c: f32) -> Self::Output {
-        Vector3::new(self.x * c, self.y * c, self.z * c)
+        Vector3 {
+            x: self.x * c,
+            y: self.y * c,
+            z: self.z * c
+        }
     }
 }
 impl std::ops::Mul<Vector3> for f32 {
@@ -42,21 +38,102 @@ impl std::ops::Mul<Vector3> for f32 {
         v * self
     }
 }
-impl std::ops::Add for Vector3 {
-    type Output = Self;
+impl std::ops::Add<Vector3> for Vector3 {
+    type Output = Vector3;
     fn add(self, other: Self) -> Self::Output {
-        Vector3::new(self.x + other.x, self.y + other.y, self.z + other.z)
+        Vector3 {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z
+        }
     }
 }
-impl std::ops::Sub for Vector3 {
+impl std::ops::Sub<Vector3> for Vector3 {
     type Output = Self;
     fn sub(self, other: Self) -> Self::Output {
-        Vector3::new(self.x - other.x, self.y - other.y, self.z - other.z)
+        Vector3 {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z
+        }
     }
 }
 impl std::ops::Neg for Vector3 {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        Vector3::new(-self.x, -self.y, -self.z)
+        Vector3 {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z
+        }
+    }
+}
+impl From<UnitVector3> for Vector3 {
+    fn from(u: UnitVector3) -> Self {
+        u.0
+    }
+}
+impl From<&UnitVector3> for Vector3 {
+    fn from(u: &UnitVector3) -> Self {
+        u.0
+    }
+}
+
+/// A 3D vector that is always normalized
+// TODO deserializing does not check for unit length
+#[derive(serde::Deserialize, Copy,Clone,Debug)]
+pub struct UnitVector3(Vector3);
+impl UnitVector3 {
+    pub fn reflect(&self, n: &Self) -> UnitVector3 {
+        let v = self.0 - (2.0 * self.dot(&n) * n);
+        UnitVector3::from(v)
+    }
+    pub fn dot(&self, other: &Self) -> f32 {
+        self.0.dot(&other.0)
+    }
+    pub fn cross(&self, other: &Self) -> Self {
+        UnitVector3::from(self.0.cross(&other.0))
+    }
+}
+impl std::ops::Neg for UnitVector3 {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        UnitVector3(-self.0)
+    }
+}
+impl std::ops::Mul<f32> for UnitVector3 {
+    type Output = Vector3;
+    fn mul(self, c: f32) -> Self::Output {
+        self.0 * c
+    }
+}
+impl std::ops::Mul<UnitVector3> for f32 {
+    type Output = Vector3;
+    fn mul(self, v: UnitVector3) -> Self::Output {
+        v.0 * self
+    }
+}
+impl std::ops::Mul<f32> for &UnitVector3 {
+    type Output = Vector3;
+    fn mul(self, c: f32) -> Self::Output {
+        self.0 * c
+    }
+}
+impl std::ops::Mul<&UnitVector3> for f32 {
+    type Output = Vector3;
+    fn mul(self, v: &UnitVector3) -> Self::Output {
+        v.0 * self
+    }
+}
+impl From<Vector3> for UnitVector3 {
+    fn from(v: Vector3) -> Self {
+        let length = v.length();
+        Self(
+            Vector3 {
+                x: v.x / length,
+                y: v.y / length,
+                z: v.z / length
+            }
+        )
     }
 }

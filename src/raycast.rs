@@ -6,11 +6,11 @@ mod ray;
 
 use crate::utils;
 use crate::raycast::{
-    general::color::{self, Color},
+    general::{Intersect, color::{self, Color} },
     camera::PerspectiveCamera,
     ray::Ray,
     objects::Scene,
-    vector3::Vector3,
+    vector3::{UnitVector3},
 };
 
 use std::env::{Args};
@@ -83,10 +83,12 @@ fn scene_from_json(filepath: &str) -> ParseResult {
     file.read_to_string(&mut contents)
         .map_err(|e| format!("Failure to read file: {}", e))?;
 
-    let (camera, scene) = serde_json::from_str(&contents)
-        .map_err(|e| format!("Failure to parse: {}", e))?;
-
-    let camera = PerspectiveCamera::from(camera);
+    let mut data: serde_json::value::Value = serde_json::from_str(&contents)
+        .map_err(|e| format!("Failure with JSON: {}", e))?;
+    let camera = PerspectiveCamera::from_json(data["camera"].take())
+        .map_err(|e| format!("Failure with camera: {}", e))?;
+    let scene = Scene::from_json(data["scene"].take())
+        .map_err(|e| format!("Failure with scene: {}", e))?;
 
     Ok((camera, scene))
 }
@@ -102,26 +104,26 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
             let off_intersect_surface = 
                 intersect.point + (intersect.normal * 0.0001);
 
-            let color = scene.lights().iter().fold(
+            let color = scene.lights.iter().fold(
                 color::consts::BLACK, |acc, light| {
 
                 let surface_to_light = (light.position - intersect.point)
                                        .normalized();
 
                 // Shadows:
-                let ray_to_light = Ray::new(
-                    off_intersect_surface,
-                    surface_to_light,
-                );
+                let ray_to_light = Ray {
+                    origin: off_intersect_surface,
+                    direction: surface_to_light,
+                };
                 if scene.intersect(&ray_to_light, f32::EPSILON).is_none() {
                     // intersection point is hit by the light, so color it
                     acc 
                     + phong(
                         intersect.material.color, 
-                        light.color_to_target(intersect.point),
-                        surface_to_light,
-                        intersect.normal,
-                        -ray.direction()
+                        light.color,
+                        &surface_to_light,
+                        &intersect.normal,
+                        &-ray.direction
                     )
                 } else {
                     // ignore light at this point
@@ -132,54 +134,55 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
             });
 
             // Reflections: Add color seen by reflected ray to current ray
-            let reflected_ray = Ray::new(
-                off_intersect_surface,
-                Vector3::reflect(ray.direction(), intersect.normal)
-            );
+            let reflected_ray = Ray {
+                origin: off_intersect_surface,
+                direction: ray.direction.reflect(&intersect.normal)
+            };
             // Recursive call:
             return color + shade(&scene, &reflected_ray, n-1)
         },
         // Shade with ambient color and end recursion
-        _ => scene.ambient_color()
+        _ => scene.ambient_color
     }
 }
 
 /// Phong reflection; color is the sum of diffuse and specular by light
-fn phong(diffuse: Color, 
-         specular: Color,
-         surface_to_light: Vector3,
-         normal: Vector3,
-         to_viewer: Vector3) -> Color {
-    // FIXME set this to 0.0 and decide go study some more
-    let shininess = 7.0; // TODO Move this into Material?;
-
-    // From wikipedia: "each term should only be included if the term's dot
-    // product is positive"
+fn phong(
+    diffuse: Color,
+    specular: Color,
+    surface_to_light: &UnitVector3,
+    normal: &UnitVector3,
+    to_viewer: &UnitVector3
+) -> Color {
+    // FIXME shininess-effect seems wrong or lightning is generally fricked
+    let shininess = 100.0; // TODO Move this into Material?;
 
     // Dot product of the two terms:
     // Diffuse
-    let diffuse_term = surface_to_light.dot(normal);
+    let diffuse_term = surface_to_light.dot(&normal);
     // Specular
-    let reflection = 
+    let reflection = {
         // Not same as `Vector3::reflect` for reasons:
         // wikipedia/specular_reflection
-        2.0 * surface_to_light.dot(normal) * normal - surface_to_light; 
-    let specular_term = reflection.dot(to_viewer);
+        let r = 2.0
+            * surface_to_light.dot(&normal)
+            * normal
+            - surface_to_light.into();
+        r.normalized()
+    };
+    let specular_term = reflection.dot(&to_viewer);
 
-    // Diffuse shading:
-    diffuse
-        * if diffuse_term <= 0.0 {
-            0.0
-        } else {
-            diffuse_term
-        }
-    // Specular shading:
-    // ...continuing: "Additionally, the specular term should only be
+    // From wikipedia: "each term should only be included if the term's dot
+    // product is positive" -- "Additionally, the specular term should only be
     // included if the dot product of the diffuse term is positive"
-    + specular
-        * if specular_term <= 0.0 || diffuse_term <= 0.0 {
-            0.0
-        } else {
-            specular_term.powf(shininess)
-        }
+    if diffuse_term <= 0.0 {
+        color::consts::BLACK
+    } else {
+        diffuse * diffuse_term
+            + if specular_term <= 0.0 {
+                color::consts::BLACK
+            } else {
+                specular * specular_term.powf(shininess)
+            }
+    }
 }
