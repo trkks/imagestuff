@@ -1,5 +1,7 @@
 use std::env;
 use image::Rgb as Rgb;
+use terminal_toys::progress_bar::ProgressBar;
+
 use crate::utils;
 
 type ImgBuffer16 = image::ImageBuffer<Rgb<u16>, Vec<u16>>;
@@ -66,7 +68,7 @@ fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
     new_pixels.reserve((w * h * 3) as usize); // cast to usize
     
     // Configure a progress bar
-    let mut progress = utils::ProgressBar::new((w * h) as usize, 16);
+    let mut progress = ProgressBar::new((w * h) as usize, 16);
 
     for (i, (&p1, &p2)) in img1.pixels().zip(img2.pixels()).enumerate() {
         // Add new pixel lerped between two in image

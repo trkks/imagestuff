@@ -1,5 +1,7 @@
 use std::env;
 use image::Rgb as Rgb;
+use terminal_toys::progress_bar::ProgressBar;
+
 use crate::utils;
 
 
@@ -26,7 +28,7 @@ pub fn run(mut args: env::Args) -> Result<(),String> {
     new_pixels.reserve(n); // cast to usize
     
     // Configure a progress bar
-    let mut progress = utils::ProgressBar::new((w*h) as usize, 16);
+    let mut progress = ProgressBar::new((w*h) as usize, 16);
 
     for (i, &pixel) in img.pixels().enumerate() {
         if i % 2 == 0 {

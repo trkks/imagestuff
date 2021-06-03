@@ -2,6 +2,7 @@ use std::env;
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
+use terminal_toys::progress_bar::ProgressBar;
 
 use crate::utils;
 
@@ -53,7 +54,7 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
     let mut ascii = Vec::new();
     let n = img.pixels().len();
     ascii.reserve(n * 2 + h as usize);
-    let mut progress = utils::ProgressBar::new(n, 25);
+    let mut progress = ProgressBar::new(n, 25);
     progress.title("Converting to ascii");
     for (i, &pixel) in img.pixels().enumerate() {
         if i % w as usize == 0 && i != 0 {
