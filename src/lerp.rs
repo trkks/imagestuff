@@ -1,6 +1,6 @@
 use std::env;
 use image::Rgb as Rgb;
-use terminal_toys::progress_bar::ProgressBar;
+use terminal_toys::ProgressBar;
 
 use crate::utils;
 
@@ -16,7 +16,7 @@ impl LerpConfig {
         let filepaths: Vec<String> = args.collect();
         if filepaths.len() < 2 {
             return Err(
-                String::from("Didn't get enough input files (need atleast 2)"))
+                String::from("Didn't get enough input files (need at least 2)"))
         }
 
         Ok(LerpConfig { filepaths })
@@ -28,32 +28,42 @@ pub fn run(args: env::Args) -> Result<(), String> {
 
     // TODO Lerp based on the size of first input ie. squeeze/stretch to fit
 
-    // zip the filepaths so, that lerp is being done between every two
-    // consecutive paths eg.
-    // f1,f2,f3,f4 -> f1:f2, f2:f3, f3:f4
-    // f1,f2,f3    -> f1:f2, f2:f3
+    // zip the files so, that lerp is being done between every two consecutive
+    // images eg.
+    // img1,img2,img3,img4 -> img1:img2, img2:img3, img3:img4
+    // img1,img2,img3    -> img1:img2, img2:img3
 
-    // eg. Original = f1,f2,f3,f4
+    // eg. Original = img1,img2,img3,img4
     // ->
-    // f1:f2, f2:f3, f3:f4, (f4:None)
-    let one_path_skipped =  config.filepaths.iter().skip(1);
-    let zipped_paths = config.filepaths.iter().zip(one_path_skipped);
-    // TODO load the images into memory beforehand
-    for (f1, f2) in zipped_paths {
-        println!("Lerping between: '{}' and '{}'", f1, f2);
-        lerp_images(f1, f2)?;
+    // img1:img2, img2:img3, img3:img4, (img4:None)
+    let images = load_all(config.filepaths)?;
+    let one_img_skipped =  images.iter().skip(1);
+    let zipped_imgs = images.iter().zip(one_img_skipped);
+    for (img1, img2) in zipped_imgs {
+        println!("Lerping between: '{}' and '{}'", img1.path, img2.path);
+        lerp_images(img1, img2)?;
     }
 
     Ok(())
 }
 
-// Generate an image that's halfway faded between two images
-fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
-    utils::confirm_dir("pics")?;
+struct ImageData { path: String, buffer: ImgBuffer16, }
+fn load_all(files: Vec<String>) -> Result<Vec<ImageData>, String> {
+    let mut imgs = Vec::with_capacity(files.len());
+    for f in files {
+        match utils::open_decode(&f) {
+            Ok(img) =>
+                imgs.push(ImageData { path: f, buffer: img.into_rgb16() }),
+            Err(e)    => return Err(e.to_string()),
+        }
+    }
+    Ok(imgs)
+}
 
-    // Read image from file
-    let (img1, img2) = (utils::open_decode(file1)?.into_rgb16(),
-                        utils::open_decode(file2)?.into_rgb16());
+// Generate an image that's halfway faded between two images
+fn lerp_images(img1: &ImageData, img2: &ImageData) -> Result<(), String>  {
+    let ImageData { path: file1, buffer: img1 } = img1;
+    let ImageData { path: file2, buffer: img2 } = img2;
 
     if img1.dimensions() != img2.dimensions()  {
         return Err(format!("The images are not the same size"));
@@ -62,7 +72,6 @@ fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
     let w = img1.width();
     let h = img1.height();
 
-    println!("Lerping between images");
     // Lerp between corresponding pixels in the two images and save to a third
     let mut new_pixels :Vec<u16> = Vec::new();
     new_pixels.reserve((w * h * 3) as usize); // cast to usize
@@ -72,7 +81,7 @@ fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
 
     for (i, (&p1, &p2)) in img1.pixels().zip(img2.pixels()).enumerate() {
         // Add new pixel lerped between two in image
-        let [r,g,b] = utils::half_lerp(p1, p2);
+        let [r,g,b] = half_lerp(p1, p2);
         new_pixels.push(r); new_pixels.push(g); new_pixels.push(b); 
 
         // Display the progress bar
@@ -80,6 +89,7 @@ fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
         progress.print_update().map_err(|e| e.to_string())?; 
     }
 
+    utils::confirm_dir("pics")?;
     let newfile = format!("./pics/lerp_{}_{}.png",
                           utils::filename(file1)?, utils::filename(file2)?);
     println!("\nSaving to {}", &newfile);
@@ -91,4 +101,12 @@ fn lerp_images(file1: &str, file2: &str) -> Result<(), String>  {
         .expect(format!("Failed at saving file to: '{}'", newfile).as_str());
 
     Ok(())
+}
+
+fn half_lerp(p1: Rgb<u16>, p2: Rgb<u16>) -> [u16;3] {
+    // Linear interpolation aped from wikipedia
+    // Normalize and subtract and divide by 2 and add p1 and return
+    [p1[0] + ((p2[0] as f32 - p1[0] as f32) as u16 >> 1),
+     p1[1] + ((p2[1] as f32 - p1[1] as f32) as u16 >> 1),
+     p1[2] + ((p2[2] as f32 - p1[2] as f32) as u16 >> 1)]
 }

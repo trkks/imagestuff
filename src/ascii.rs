@@ -2,7 +2,8 @@ use std::env;
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
-use terminal_toys::progress_bar::ProgressBar;
+use image::Rgb;
+use terminal_toys::ProgressBar;
 
 use crate::utils;
 
@@ -11,6 +12,7 @@ pub struct AsciiConfig {
     source_file: PathBuf,
     width: u32,
     height: u32,
+    inverted: bool,
 }
 
 impl AsciiConfig {
@@ -30,18 +32,33 @@ impl AsciiConfig {
             _ => (50, 50),
         };
 
-        Ok(AsciiConfig { source_file, width, height })
+        let inverted = if let Some(s) = args.next() {
+            s == "--inverted"
+        } else {
+            false
+        };
+
+        Ok(AsciiConfig { source_file, width, height, inverted})
     }
 }
 
 pub fn run(args: env::Args) -> Result<(), String> {
     let config = AsciiConfig::new(args).map_err(|e| e.to_string())?;
-    ascii_image(config.source_file.to_str().unwrap(), 
-                config.width, config.height)
+    ascii_image(
+        config.source_file.to_str().unwrap(), 
+        config.width,
+        config.height,
+        config.inverted
+    )
 }
 
 // Using ascii characters, generate a textfile representation of an image
-fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
+fn ascii_image(
+    srcfile: &str,
+    w: u32,
+    h: u32,
+    inverted: bool
+) -> Result<(), String> {
     utils::confirm_dir("ascii")?;
 
     // First open imagefile, confirming its validity
@@ -60,7 +77,7 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
         if i % w as usize == 0 && i != 0 {
             ascii.push('\n');
         }
-        let asciipixel = utils::pixel_to_ascii(pixel); 
+        let asciipixel = pixel_to_ascii(pixel, inverted); 
         // Push twice so that textfile looks more like an image in an editor
         ascii.push(asciipixel);
         ascii.push(asciipixel);
@@ -76,4 +93,28 @@ fn ascii_image(srcfile: &str, w: u32, h: u32) -> Result<(), String>{
 
     file.write_all(ascii.into_iter().collect::<String>().as_bytes())
         .map_err(|e| e.to_string())
+}
+
+// Get ascii character that looks like the brightness of the pixel
+fn pixel_to_ascii(pixel: Rgb<u16>, inverted: bool) -> char {
+    // Divide by more (0.2) than count (3) to make slightly darker
+    let brightness = (pixel[0] as f32 / u16::MAX as f32 +
+                      pixel[1] as f32 / u16::MAX as f32 +
+                      pixel[2] as f32 / u16::MAX as f32) / 3.2;
+
+
+    let shades = if inverted {
+        ['#', '@', '0', 'o', '=', '~', '-', ' ']
+    } else {
+        [' ', '-', '~', '=', 'o', '0', '@', '#']
+    };
+
+    if 0.875 <= brightness { shades[0] } else
+    if 0.750 <= brightness { shades[1] } else
+    if 0.625 <= brightness { shades[2] } else
+    if 0.500 <= brightness { shades[3] } else
+    if 0.375 <= brightness { shades[4] } else
+    if 0.250 <= brightness { shades[5] } else
+    if 0.125 <= brightness { shades[6] } else
+                           { shades[7] }
 }

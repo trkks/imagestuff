@@ -1,6 +1,6 @@
 use std::env;
 use image::Rgb as Rgb;
-use terminal_toys::progress_bar::ProgressBar;
+use terminal_toys::ProgressBar;
 
 use crate::utils;
 
