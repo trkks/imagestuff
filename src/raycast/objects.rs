@@ -1,5 +1,7 @@
 /// This module contains objects that are `Intersect`
 
+use std::convert::TryFrom;
+
 use crate::raycast::{
     general::{color, Intersect, Intersection, Light, Material},
     ray::Ray,
@@ -13,8 +15,9 @@ pub struct Scene {
     spheres: Vec<Sphere>,
     planes: Vec<Plane>,
 }
-impl Scene {
-    pub fn from_json(
+impl TryFrom<serde_json::Value> for Scene {
+    type Error = serde_json::Error;
+    fn try_from(
         mut json: serde_json::Value,
     ) -> Result<Self,serde_json::Error> {
         let ambient_color =

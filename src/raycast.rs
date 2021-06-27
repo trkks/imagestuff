@@ -13,6 +13,7 @@ use crate::raycast::{
     vector3::{UnitVector3},
 };
 
+use std::convert::{TryFrom};
 use std::env::{Args};
 use std::io::{Read};
 use std::fs::{File};
@@ -85,9 +86,9 @@ fn scene_from_json(filepath: &str) -> ParseResult {
 
     let mut data: serde_json::value::Value = serde_json::from_str(&contents)
         .map_err(|e| format!("Failure with JSON: {}", e))?;
-    let camera = PerspectiveCamera::from_json(data["camera"].take())
+    let camera = PerspectiveCamera::try_from(data["camera"].take())
         .map_err(|e| format!("Failure with camera: {}", e))?;
-    let scene = Scene::from_json(data["scene"].take())
+    let scene = Scene::try_from(data["scene"].take())
         .map_err(|e| format!("Failure with scene: {}", e))?;
 
     Ok((camera, scene))
