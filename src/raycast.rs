@@ -1,6 +1,7 @@
 mod general;
 mod objects;
 mod vector3;
+mod matrix;
 mod camera;
 mod ray;
 
