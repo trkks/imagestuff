@@ -21,6 +21,7 @@ pub trait Intersect {
 #[derive(Debug)]
 pub struct Material {
     pub color: color::Color,
+    pub shininess: i32,
 }
 
 #[derive(serde::Deserialize)]
@@ -29,22 +30,6 @@ pub struct Light {
     pub _direction: Option<Vector3>,
     pub color: color::Color,
     pub intensity: f32,
-}
-impl Light {
-    /// Scales the light's intensity relative to a target's position
-    //TODO This might very well be stupid
-    pub fn color_to_target(&self, target_pos: Vector3) -> color::Color {
-        let to_target = target_pos - self.position;
-        // Normalize to lights intensity or in other words "range"
-        let mut factor = self.intensity / to_target.length(); // NOTE x / 0
-        if let Some(_dir) = self._direction {
-            // Scale with relation to direction's "cone" (eg. dead-on => max)
-            //TODO if angle between direction and to_target is small => max
-            factor *= 1.0;
-        }
-
-        self.color * factor
-    }
 }
 
 pub mod color {

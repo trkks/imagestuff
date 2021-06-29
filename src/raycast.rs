@@ -11,7 +11,7 @@ use crate::raycast::{
     camera::PerspectiveCamera,
     ray::Ray,
     objects::Scene,
-    vector3::{UnitVector3},
+    vector3::{Vector3, UnitVector3},
 };
 
 use std::convert::{TryFrom};
@@ -51,9 +51,6 @@ pub fn run(mut args: Args) -> Result<(), String> {
         _                 => (128, 128),
     };
 
-    // Amount of times to trace reflections:
-    let reflection_count = 6;
-
     // Render:
     let image = ImgBuffer16::from_fn(width as u32, height as u32, |ix, iy| {
 
@@ -64,8 +61,9 @@ pub fn run(mut args: Args) -> Result<(), String> {
         let y: f32 = -(iy as f32 / height as f32 * 2.0 - 1.0);
         let ray = camera.shoot_at(x, y);
 
-        // Shade the pixel with RGB color
-        shade(&scene, &ray, reflection_count).into()
+        // Shade the pixel with RGB color; 6 traces/reflections are made for
+        // each intersection
+        shade(&scene, &ray, 6).into()
 
     });
 
@@ -107,30 +105,39 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
                 intersect.point + (intersect.normal * 0.0001);
 
             let color = scene.lights.iter().fold(
-                color::consts::BLACK, |acc, light| {
+                scene.ambient_color, |acc, light| {
 
-                let surface_to_light = (light.position - intersect.point)
-                                       .normalized();
+                let (distance_to_light, surface_to_light) = {
+                    let v = light.position - intersect.point;
+                    (v.length(), v.normalized())
+                };
 
                 // Shadows:
                 let ray_to_light = Ray {
                     origin: off_intersect_surface,
                     direction: surface_to_light,
                 };
+                // If intersection point is hit by the light, color it
                 if scene.intersect(&ray_to_light, f32::EPSILON).is_none() {
-                    // intersection point is hit by the light, so color it
+                    // Shading model from:
+                    // http://www.cs.cornell.edu/courses/cs4620/2014fa/lectures/05rt-shading.pdf
+                    let light_intensity = light.intensity / distance_to_light;
+                    let bisector = {
+                        let v: Vector3 = (-ray.direction).into();
+                        let w: Vector3 = surface_to_light.into();
+                        (v + w).normalized()
+                    };
+
                     acc 
-                    + phong(
-                        intersect.material.color, 
-                        light.color,
-                        &surface_to_light,
-                        &intersect.normal,
-                        &-ray.direction
-                    )
+                    + intersect.material.color
+                    * light_intensity
+                    * f32::max(0.0, intersect.normal.dot(&surface_to_light))
+                    + light.color
+                    * light_intensity
+                    * f32::max(0.0, intersect.normal.dot(&bisector))
+                        .powi(intersect.material.shininess)
                 } else {
-                    // ignore light at this point
-                    // TODO Calculate intensity of shadow based on intersection
-                    // color's value??
+                    // Ignore light at this point
                     acc
                 }
             });
@@ -141,50 +148,14 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
                 direction: ray.direction.reflect(&intersect.normal)
             };
             // Recursive call:
-            return color + shade(&scene, &reflected_ray, n-1)
+            return color
+                + shade(
+                    &scene,
+                    &reflected_ray,
+                    n - 1
+                )
         },
         // Shade with ambient color and end recursion
         _ => scene.ambient_color
-    }
-}
-
-/// Phong reflection; color is the sum of diffuse and specular by light
-fn phong(
-    diffuse: Color,
-    specular: Color,
-    surface_to_light: &UnitVector3,
-    normal: &UnitVector3,
-    to_viewer: &UnitVector3
-) -> Color {
-    // FIXME shininess-effect seems wrong or lightning is generally fricked
-    let shininess = 100.0; // TODO Move this into Material?;
-
-    // Dot product of the two terms:
-    // Diffuse
-    let diffuse_term = surface_to_light.dot(&normal);
-    // Specular
-    let reflection = {
-        // Not same as `Vector3::reflect` for reasons:
-        // wikipedia/specular_reflection
-        let r = 2.0
-            * surface_to_light.dot(&normal)
-            * normal
-            - surface_to_light.into();
-        r.normalized()
-    };
-    let specular_term = reflection.dot(&to_viewer);
-
-    // From wikipedia: "each term should only be included if the term's dot
-    // product is positive" -- "Additionally, the specular term should only be
-    // included if the dot product of the diffuse term is positive"
-    if diffuse_term <= 0.0 {
-        color::consts::BLACK
-    } else {
-        diffuse * diffuse_term
-            + if specular_term <= 0.0 {
-                color::consts::BLACK
-            } else {
-                specular * specular_term.powf(shininess)
-            }
     }
 }
