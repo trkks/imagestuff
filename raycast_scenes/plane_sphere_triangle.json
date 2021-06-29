@@ -1,0 +1,60 @@
+{
+    "camera": {
+        "position":   [0, 0, 1],
+        "direction":  [0, 0, -1],
+        "up": [0, 1, 0],
+        "fov": 90,
+        "view_bounds": [0, 1]
+    },
+    "scene": {
+        "ambient_color": [0.025,0,0.05],
+        "spheres": [
+            {
+                "origin": [0.80, -0.5, -2],
+                "radius": 0.5,
+                "material": { 
+                    "color": [0.7, 0.1, 0.4],
+                    "shininess": 10
+                }
+            },
+            {
+                "origin": [-0.45, -0.5, -1.5],
+                "radius": 0.5,
+                "material": { 
+                    "color": [0.4, 0.1, 0.7],
+                    "shininess": 10
+                }
+            }
+        ],
+        "planes": [
+            {
+                "offset": 1,
+                "normal": [0, 1, 0],
+                "material": { 
+                    "color": [0.4, 0.1, 0.3],
+                    "shininess": 1
+                }
+            }
+        ],
+        "triangles": [
+            {
+                "vertices": [
+                    [   0,-0.05, -1.4],
+                    [ 0.3, 0.45, -0.4],
+                    [-0.3, 0.45, -0.2]
+                ],
+                "material": { 
+                    "color": [0.1, 0.3, 0.7],
+                    "shininess": 1
+                }
+            }
+        ],
+        "lights": [
+            {
+                "position": [0, 2, 4],
+                "color": [ 1, 1, 1],
+                "intensity": 1
+            }
+        ]
+    }
+}

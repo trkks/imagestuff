@@ -12,11 +12,7 @@ pub struct Intersection {
     pub material: Material,
 }
 
-// TODO Make getting material a trait that returns some default if not
-// specified in json
-
 pub trait Intersect {
-    //fn material(&self) -> Material;
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection>;
 }
 
@@ -25,6 +21,11 @@ pub trait Intersect {
 pub struct Material {
     pub color: color::Color,
     pub shininess: i32,
+}
+impl std::default::Default for Material {
+    fn default() -> Self {
+        Material { color: color::consts::GREY, shininess: 0 }
+    }
 }
 
 pub struct Light {
@@ -59,6 +60,7 @@ pub mod color {
     pub mod consts {
         use super::*;
         pub const BLACK: Color = Color::new(0.0, 0.0, 0.0);
+        pub const GREY:  Color = Color::new(0.5, 0.5, 0.5);
         pub const WHITE: Color = Color::new(1.0, 1.0, 1.0);
         pub const RED:   Color = Color::new(1.0, 0.0, 0.0);
         pub const GREEN: Color = Color::new(0.0, 1.0, 0.0);

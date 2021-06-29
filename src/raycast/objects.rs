@@ -89,7 +89,7 @@ impl Intersect for Scene {
 pub struct Sphere {
     origin: Vector3,
     radius: f32,
-    material: Material,
+    material: Option<Material>,
 }
 
 impl TryFrom<&mut serde_json::Value> for Sphere {
@@ -100,7 +100,7 @@ impl TryFrom<&mut serde_json::Value> for Sphere {
     ) -> Result<Self,serde_json::Error> {
         let origin = serde_json::from_value(json["origin"].take())?;
         let radius = serde_json::from_value(json["radius"].take())?;
-        let material = serde_json::from_value(json["material"].take())?;
+        let material = serde_json::from_value(json["material"].take()).ok();
 
         Ok(Sphere { origin, radius, material })
     }
@@ -137,7 +137,14 @@ impl Intersect for Sphere {
         if let Some(t) = opt {
             let point = ray.cast(t);
             let normal = (point - self.origin).normalized();
-            Some(Intersection {t, point, normal, material: self.material })
+            Some(
+                Intersection {
+                    t,
+                    point,
+                    normal,
+                    material: self.material.unwrap_or_default() 
+                }
+            )
         } else {
             None
         }
@@ -148,7 +155,7 @@ impl Intersect for Sphere {
 pub struct Plane {
     offset: f32,
     normal: UnitVector3,
-    material: Material,
+    material: Option<Material>,
 }
 
 impl TryFrom<&mut serde_json::Value> for Plane {
@@ -158,7 +165,7 @@ impl TryFrom<&mut serde_json::Value> for Plane {
         json: &mut serde_json::Value,
     ) -> Result<Self,serde_json::Error> {
         let offset = serde_json::from_value(json["offset"].take())?;
-        let material = serde_json::from_value(json["material"].take())?;
+        let material = serde_json::from_value(json["material"].take()).ok();
         let mut normal: Vector3 =
             serde_json::from_value(json["normal"].take())?;
 
@@ -189,7 +196,7 @@ impl Intersect for Plane {
                         t,
                         point: ray.cast(t),
                         normal: self.normal,
-                        material: self.material,
+                        material: self.material.unwrap_or_default(),
                     }
                 )
             }
@@ -206,7 +213,7 @@ impl Intersect for Plane {
 pub struct Triangle {
     vertices: [Vector3;3],
     normal: UnitVector3,
-    material: Material,
+    material: Option<Material>,
 }
 
 impl TryFrom<&mut serde_json::Value> for Triangle {
@@ -228,7 +235,7 @@ impl TryFrom<&mut serde_json::Value> for Triangle {
         let u = vertices[1] - vertices[0];
         let v = vertices[2] - vertices[0];
         let normal = Vector3::cross(&u, &v).normalized();
-        let material = serde_json::from_value(json["material"].take())?;
+        let material = serde_json::from_value(json["material"].take()).ok();
 
         Ok(Triangle { vertices, normal, material })
     }
@@ -270,7 +277,7 @@ impl Intersect for Triangle {
                     t,
                     point: q,
                     normal: self.normal,
-                    material: self.material,
+                    material: self.material.unwrap_or_default(),
                 }
             )
         }
