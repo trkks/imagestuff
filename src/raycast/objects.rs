@@ -9,6 +9,7 @@ use crate::raycast::{
     matrix::SquareMatrix3,
 };
 
+// TODO Add transformation matrix; maybe a Transform -trait?
 /// A collection of objects
 pub struct Scene {
     pub ambient_color: color::Color,
@@ -17,33 +18,50 @@ pub struct Scene {
     planes: Vec<Plane>,
     triangles: Vec<Triangle>,
 }
+
 impl TryFrom<serde_json::Value> for Scene {
     type Error = serde_json::Error;
 
     fn try_from(
         mut json: serde_json::Value,
     ) -> Result<Self,serde_json::Error> {
-        let ambient_color =
-            serde_json::from_value(json["ambient_color"].take())?;
-        let lights = serde_json::from_value(json["lights"].take())?;
-        let spheres = serde_json::from_value(json["spheres"].take())?;
-        // TODO The planes' normals are not deserialized into unit vectors
-        let planes = serde_json::from_value(json["planes"].take())?;
-        let triangles = serde_json::from_value::<Vec<serde_json::Value>>(json["triangles"].take())?
-            .iter_mut()
-            .map(|x| {
-                let vertices: [Vector3;3] =
-                    serde_json::from_value(x["vertices"].take()).unwrap();
-                // NOTE Order of vertices is relevant for the normal
-                // Here the right hand rule is used (counter clockwise order)
-                let u = vertices[1] - vertices[0];
-                let v = vertices[2] - vertices[0];
-                let normal = Vector3::cross(&u, &v).normalized();
-                let material =
-                    serde_json::from_value(x["material"].take()).unwrap();
+        // TODO Move these into iterating every element with position
+        // in scene and describe them in json file
+        //let rot_y = SquareMatrix3::rot_y(
+        //    45.0 * (std::f32::consts::PI / 180.0)
+        //);
+        //let rot_x = SquareMatrix3::rot_x(
+        //    45.0 * (std::f32::consts::PI / 180.0)
+        //);
 
-                Triangle { vertices, normal, material }
-            })
+        use serde_json::{Value, from_value};
+
+        let ambient_color = from_value(json["ambient_color"].take())?;
+
+        // NOTE Bad objects are just ignored by filter_map 
+        // -> easily causes unexpected scenes
+        let lights = from_value::<Vec<Value>>(json["lights"].take())
+            .unwrap_or_default()
+            .iter_mut()
+            .filter_map(|x| Light::try_from(x).ok())
+            .collect();
+
+        let spheres = from_value::<Vec<Value>>(json["spheres"].take())
+            .unwrap_or_default()
+            .iter_mut()
+            .filter_map(|x| Sphere::try_from(x).ok())
+            .collect();
+
+        let planes = from_value::<Vec<Value>>(json["planes"].take())
+            .unwrap_or_default()
+            .iter_mut()
+            .filter_map(|x| Plane::try_from(x).ok())
+            .collect();
+
+        let triangles = from_value::<Vec<Value>>(json["triangles"].take())
+            .unwrap_or_default()
+            .iter_mut()
+            .filter_map(|x| Triangle::try_from(x).ok())
             .collect();
 
         Ok(Scene { ambient_color, lights, spheres, planes, triangles })
@@ -53,9 +71,9 @@ impl TryFrom<serde_json::Value> for Scene {
 impl Intersect for Scene {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         let spheres = self.spheres.iter()
-            .filter_map(|obj| obj.intersect(ray, tmin));
+            .filter_map(|obj| obj.intersect(&ray, tmin));
         let planes = self.planes.iter()
-            .filter_map(|obj| obj.intersect(ray, tmin));
+            .filter_map(|obj| obj.intersect(&ray, tmin));
         let triangles = self.triangles.iter()
             .filter_map(|obj| obj.intersect(&ray, tmin));
 
@@ -67,12 +85,27 @@ impl Intersect for Scene {
     }
 }
 
-#[derive(serde::Deserialize)]
+/// A sphere
 pub struct Sphere {
     origin: Vector3,
     radius: f32,
     material: Material,
 }
+
+impl TryFrom<&mut serde_json::Value> for Sphere {
+    type Error = serde_json::Error;
+
+    fn try_from(
+        json: &mut serde_json::Value,
+    ) -> Result<Self,serde_json::Error> {
+        let origin = serde_json::from_value(json["origin"].take())?;
+        let radius = serde_json::from_value(json["radius"].take())?;
+        let material = serde_json::from_value(json["material"].take())?;
+
+        Ok(Sphere { origin, radius, material })
+    }
+}
+
 impl Intersect for Sphere {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         // Calculate the items for quadratic formula
@@ -111,12 +144,31 @@ impl Intersect for Sphere {
     }
 }
 
-#[derive(serde::Deserialize)]
+/// A plane
 pub struct Plane {
     offset: f32,
     normal: UnitVector3,
     material: Material,
 }
+
+impl TryFrom<&mut serde_json::Value> for Plane {
+    type Error = serde_json::Error;
+
+    fn try_from(
+        json: &mut serde_json::Value,
+    ) -> Result<Self,serde_json::Error> {
+        let offset = serde_json::from_value(json["offset"].take())?;
+        let material = serde_json::from_value(json["material"].take())?;
+        let mut normal: Vector3 =
+            serde_json::from_value(json["normal"].take())?;
+
+        //normal = &rot_y * &normal;
+        //normal = &rot_x * &normal;
+
+        Ok(Plane { offset, normal: normal.normalized(), material })
+    }
+}
+
 impl Intersect for Plane {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         let denominator = ray.direction.dot(&self.normal);
@@ -150,12 +202,38 @@ impl Intersect for Plane {
     }
 }
 
-#[derive(serde::Deserialize)]
+/// A triangle
 pub struct Triangle {
     vertices: [Vector3;3],
     normal: UnitVector3,
     material: Material,
 }
+
+impl TryFrom<&mut serde_json::Value> for Triangle {
+    type Error = serde_json::Error;
+
+    fn try_from(
+        json: &mut serde_json::Value,
+    ) -> Result<Self,serde_json::Error> {
+        let mut vertices: [Vector3;3] =
+            serde_json::from_value(json["vertices"].take())?;
+
+        //for v in vertices.iter_mut() {
+        //    *v = &rot_y * v;
+        //    *v = &rot_json * v;
+        //}
+
+        // NOTE Order of vertices is relevant for the normal
+        // Here the right hand rule is used (counter clockwise order)
+        let u = vertices[1] - vertices[0];
+        let v = vertices[2] - vertices[0];
+        let normal = Vector3::cross(&u, &v).normalized();
+        let material = serde_json::from_value(json["material"].take())?;
+
+        Ok(Triangle { vertices, normal, material })
+    }
+}
+
 impl Intersect for Triangle {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         // Algorithm from:

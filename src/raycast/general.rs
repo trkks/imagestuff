@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use crate::raycast::{
     vector3::{Vector3, UnitVector3},
     ray::Ray,
@@ -11,12 +12,14 @@ pub struct Intersection {
     pub material: Material,
 }
 
+// TODO Make getting material a trait that returns some default if not
+// specified in json
+
 pub trait Intersect {
     //fn material(&self) -> Material;
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection>;
 }
 
-// Generic name if this grows in the future
 #[derive(serde::Deserialize,Copy,Clone)]
 #[derive(Debug)]
 pub struct Material {
@@ -24,12 +27,27 @@ pub struct Material {
     pub shininess: i32,
 }
 
-#[derive(serde::Deserialize)]
 pub struct Light {
     pub position: Vector3,
     pub _direction: Option<Vector3>,
     pub color: color::Color,
     pub intensity: f32,
+}
+impl TryFrom<&mut serde_json::Value> for Light {
+    type Error = serde_json::Error;
+
+    fn try_from(
+        json: &mut serde_json::Value
+    ) -> Result<Self,serde_json::Error> {
+        let color = serde_json::from_value(json["color"].take())?;
+        let intensity = serde_json::from_value(json["intensity"].take())?;
+        let mut position = serde_json::from_value(json["position"].take())?;
+
+        //position = &rot_y * &position;
+        //position = &rot_x * &position;
+
+        Ok(Light { position, _direction: None, color, intensity })
+    }
 }
 
 pub mod color {

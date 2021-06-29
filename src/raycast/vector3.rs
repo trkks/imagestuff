@@ -85,7 +85,7 @@ impl From<&UnitVector3> for Vector3 {
 pub struct UnitVector3(Vector3);
 impl UnitVector3 {
     pub fn reflect(&self, n: &Self) -> UnitVector3 {
-        let v = self.0 - (2.0 * self.dot(&n) * n);
+        let v = self.0 - 2.0 * self.0.dot(&n.0) * n.0;
         UnitVector3::from(v)
     }
     pub fn dot(&self, other: &Self) -> f32 {

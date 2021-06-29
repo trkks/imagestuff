@@ -125,6 +125,8 @@ fn shade(scene: &Scene, ray: &Ray, n: usize) -> Color {
                     let bisector = {
                         let v: Vector3 = (-ray.direction).into();
                         let w: Vector3 = surface_to_light.into();
+                        // From wikipedia "Phong reflection model":
+                        //let w: Vector3 = 2.0 * surface_to_light.dot(&intersect.normal) * Vector3::from(intersect.normal) - Vector3::from(surface_to_light);
                         (v + w).normalized()
                     };
 
