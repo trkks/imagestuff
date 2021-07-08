@@ -35,12 +35,15 @@ impl PerspectiveCamera {
         }
     }
 
-    pub fn shoot_at(&self, x: f32, y: f32) -> Ray {
+    pub fn shoot_at(&self, x: f32, y: f32, aspect: f32) -> Ray {
         // NOTE This assumes that x and y have been scaled into [-1, 1]
         let z = 1.0 / f32::tan(self.fov / 2.0);
 
         // Generate ray from camera to the image plane
-        let ray_direction =   x * self.horizontal
+        // FIXME Why does this work? My understanding is that aspect ratio
+        // should be multiplied to the vertical-term and not the
+        // horizontal-term like here
+        let ray_direction =   x * self.horizontal * aspect
                             + y * self.up
                             + z * self.direction
                             - self.position;

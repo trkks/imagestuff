@@ -52,14 +52,18 @@ pub fn run(mut args: Args) -> Result<(), String> {
     };
 
     // Render:
+    let aspect_ratio = width as f32 / height as f32;
+    let mut progress_bar = terminal_toys::ProgressBar::new(width * height, 25);
+    progress_bar.title("Rendering");
     let image = ImgBuffer16::from_fn(width as u32, height as u32, |ix, iy| {
+        let _ = progress_bar.print_update();
 
         // Calculate image plane coordinates x,y so that they're in [-1, 1]
         let x: f32 = ix as f32 / width  as f32 * 2.0 - 1.0;
         // y is negated to transform from raster-space (ie. origin top left)
         // into screen-space (origin bottom left)
         let y: f32 = -(iy as f32 / height as f32 * 2.0 - 1.0);
-        let ray = camera.shoot_at(x, y);
+        let ray = camera.shoot_at(x, y, aspect_ratio);
 
         // Shade the pixel with RGB color; 6 traces/reflections are made for
         // each intersection
@@ -70,9 +74,10 @@ pub fn run(mut args: Args) -> Result<(), String> {
     // Write to image file
     let result_file = format!("./{}/{}_{}x{}.png",
         output_dir, utils::filename(&filepath)?, width, height);
-    println!("Saving to {}", result_file);
-    image.save(result_file).unwrap(); // TODO Handle error-result
-    Ok(())
+    print!("\nSaving to {} ", result_file);
+
+    terminal_toys::start_spinner(|| image.save(result_file))
+        .map_err(|e| format!("Failed to save {}", e))
 }
 
 type ParseResult = Result<(PerspectiveCamera, Scene), String>;
