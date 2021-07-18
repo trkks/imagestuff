@@ -81,7 +81,7 @@ impl From<&UnitVector3> for Vector3 {
 
 /// A 3D vector that is always normalized
 // TODO deserializing does not check for unit length
-#[derive(serde::Deserialize, Copy,Clone,Debug)]
+#[derive(Copy,Clone,Debug)]
 pub struct UnitVector3(Vector3);
 impl UnitVector3 {
     pub fn reflect(&self, n: &Self) -> UnitVector3 {
@@ -135,5 +135,32 @@ impl From<Vector3> for UnitVector3 {
                 z: v.z / length
             }
         )
+    }
+}
+
+pub struct Vector4 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl Vector4 {
+    pub fn from_v3(v: Vector3, w: f32) -> Self {
+        let Vector3 { x, y, z } = v;
+        Vector4 { x, y, z, w }
+    }
+
+    pub fn zero() -> Self {
+        Vector4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
+    }
+
+    pub fn dot(&self, other: &Self) -> f32 {
+        self.x * other.x + self.y * other.y
+        + self.z * other.z + self.w * other.w
+    }
+
+    pub fn xyz(&self) -> Vector3 {
+        Vector3 { x: self.x, y: self.y, z: self.z }
     }
 }
