@@ -41,3 +41,7 @@ pub fn filename(file: &str) -> Result<&str,String> {
     }
     Err(format!("Bad filename: {}",file))
 }
+
+pub fn degs_to_rads(degs: f32) -> f32 {
+    degs * (std::f32::consts::PI / 180.0)
+}
