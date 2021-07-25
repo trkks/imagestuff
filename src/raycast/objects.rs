@@ -1,341 +1,275 @@
-/// This module contains objects that are `Intersect`
-
 use std::convert::TryFrom;
+use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
 use crate::raycast::{
-    general::{color, Intersect, Intersection, Light, Material},
+    general::{
+        Intersect,
+        Intersection,
+        Material
+    },
     ray::Ray,
-    vector3::{Vector3, UnitVector3},
-    matrix::SquareMatrix3,
+    vector::{Vector3, UnitVector3},
 };
 
-// TODO Add transformation matrix; maybe a Transform -trait?
-/// A collection of objects
-pub struct Scene {
-    pub ambient_color: color::Color,
-    pub lights: Vec<Light>,
-    spheres: Vec<Sphere>,
-    planes: Vec<Plane>,
-    triangles: Vec<Triangle>,
+pub enum Object3D {
+    Sphere {
+        origin: Vector3,
+        radius: f32,
+        material: Option<Material>,
+    },
+    Plane {
+        offset: f32,
+        normal: UnitVector3,
+        material: Option<Material>,
+    },
+    Triangle {
+        vertices: [Vector3;3],
+        normal: UnitVector3,
+        material: Option<Material>,
+    },
 }
 
-impl TryFrom<serde_json::Value> for Scene {
-    type Error = serde_json::Error;
+impl<'a> TryFrom<SerdeValue> for Object3D {
+    type Error = SerdeError;
 
-    fn try_from(
-        mut json: serde_json::Value,
-    ) -> Result<Self,serde_json::Error> {
-        // TODO Move these into iterating every element with position
-        // in scene and describe them in json file
-        //let rot_y = SquareMatrix3::rot_y(
-        //    45.0 * (std::f32::consts::PI / 180.0)
-        //);
-        //let rot_x = SquareMatrix3::rot_x(
-        //    45.0 * (std::f32::consts::PI / 180.0)
-        //);
+    fn try_from(mut json: SerdeValue) -> Result<Self, SerdeError> {
+        from_value(json["type"].take()).map(|s: String|
+            match s.to_lowercase().as_str() {
+                "sphere" => {
+                    let origin   = from_value(json["origin"].take())?;
+                    let radius   = from_value(json["radius"].take())?;
+                    let material = from_value(json["material"].take()).ok();
+                    Ok(Self::Sphere { origin, radius, material })
+                },
+                "plane" => {
+                    let offset = from_value(json["offset"].take())?;
+                    let normal = {
+                        let v: Vector3 = from_value(json["normal"].take())?;
+                        v.normalized()
+                    };
+                    let material = from_value(json["material"].take()).ok();
 
-        use serde_json::{Value, from_value};
-
-        let ambient_color = from_value(json["ambient_color"].take())?;
-
-        // NOTE Bad objects are just ignored by filter_map 
-        // -> easily causes unexpected scenes
-        let lights = from_value::<Vec<Value>>(json["lights"].take())
-            .unwrap_or_default()
-            .iter_mut()
-            .filter_map(|x| Light::try_from(x).ok())
-            .collect();
-
-        let spheres = from_value::<Vec<Value>>(json["spheres"].take())
-            .unwrap_or_default()
-            .iter_mut()
-            .filter_map(|x| Sphere::try_from(x).ok())
-            .collect();
-
-        let planes = from_value::<Vec<Value>>(json["planes"].take())
-            .unwrap_or_default()
-            .iter_mut()
-            .filter_map(|x| Plane::try_from(x).ok())
-            .collect();
-
-        let triangles = from_value::<Vec<Value>>(json["triangles"].take())
-            .unwrap_or_default()
-            .iter_mut()
-            .filter_map(|x| Triangle::try_from(x).ok())
-            .collect();
-
-        Ok(Scene { ambient_color, lights, spheres, planes, triangles })
+                    Ok(Self::Plane { offset, normal, material })
+                },
+                "triangle" => {
+                    let vertices: [Vector3;3] =
+                        from_value(json["vertices"].take())?;
+                    // NOTE Order of vertices is relevant for the normal. Here
+                    // the right hand rule is used (counter clockwise order)
+                    let u = vertices[1] - vertices[0];
+                    let v = vertices[2] - vertices[0];
+                    let normal = Vector3::cross(&u, &v).normalized();
+                    let material = from_value(json["material"].take()).ok();
+                    Ok(Self::Triangle { vertices, normal, material })
+                },
+                _ => panic!("Unrecognized 3D object type '{}'", s),
+            }
+        )?
     }
 }
 
-impl Intersect for Scene {
+impl Intersect for Object3D {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
-        let spheres = self.spheres.iter()
-            .filter_map(|obj| obj.intersect(&ray, tmin));
-        let planes = self.planes.iter()
-            .filter_map(|obj| obj.intersect(&ray, tmin));
-        let triangles = self.triangles.iter()
-            .filter_map(|obj| obj.intersect(&ray, tmin));
-
-        spheres
-            .chain(planes)
-            .chain(triangles)
-            // Select the intersection closest to ray
-            .reduce(|acc, x| if x.t < acc.t { x } else { acc })
+        match *self {
+            Self::Sphere { origin, radius, material } =>
+                sphere_intersect(ray, tmin, origin, radius, material),
+            Self::Plane { offset, normal, material } =>
+                plane_intersect(ray, tmin, offset, normal, material),
+            Self::Triangle { vertices, normal, material } =>
+                triangle_intersect(ray, tmin, vertices, normal, material),
+        }
     }
 }
 
-/// A sphere
-pub struct Sphere {
+fn sphere_intersect(
+    ray: &Ray,
+    tmin: f32,
     origin: Vector3,
     radius: f32,
     material: Option<Material>,
-}
+) -> Option<Intersection> {
+    // Calculate the items for quadratic formula
+    let to_ray_origin = ray.origin - origin;
+    // NOTE `a` is just 1.0 as ray.direction should be normalized
+    let (a, b, c) = (
+        1.0,
+        2.0 * Vector3::from(ray.direction).dot(&to_ray_origin),
+        to_ray_origin.dot(&to_ray_origin) - radius.powi(2)
+    );
 
-impl TryFrom<&mut serde_json::Value> for Sphere {
-    type Error = serde_json::Error;
+    let discriminant = b.powi(2) - 4.0 * a * c;
+    // Check that ray hits the sphere
+    if discriminant < 0.0 { return None }
 
-    fn try_from(
-        json: &mut serde_json::Value,
-    ) -> Result<Self,serde_json::Error> {
-        let origin = serde_json::from_value(json["origin"].take())?;
-        let radius = serde_json::from_value(json["radius"].take())?;
-        let material = serde_json::from_value(json["material"].take()).ok();
+    // The distances from ray origin to intersection point
+    let (t1, t2) = (
+        (-b + discriminant.sqrt()) / (2.0 * a),
+        (-b - discriminant.sqrt()) / (2.0 * a)
+    );
 
-        Ok(Sphere { origin, radius, material })
+    // Check that the intersection is greater than minimum and select the
+    // intersection closest to ray origin
+    // TODO Is this tmin float-comparison accurate enough?
+    let closest =
+        if      tmin < t1 && t1 < t2 { Some(t1) }
+        else if tmin < t2 && t2 < t1 { Some(t2) }
+        else { None };
+
+    if let Some(t) = closest {
+        let point = ray.cast(t);
+        let normal = (point - origin).normalized();
+        Some(
+            Intersection {
+                t,
+                incoming: ray.direction,
+                point,
+                normal,
+                material: material.unwrap_or_default()
+            }
+        )
+    } else {
+        None
     }
 }
 
-impl Intersect for Sphere {
-    fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
-        // Calculate the items for quadratic formula
-        let to_ray_origin = ray.origin - self.origin;
-        // NOTE `a` is just 1.0 as ray.direction should be normalized
-        let (a, b, c) = (
-            1.0,
-            2.0 * Vector3::from(ray.direction).dot(&to_ray_origin),
-            to_ray_origin.dot(&to_ray_origin) - self.radius.powi(2)
-        );
-
-        let discriminant = b.powi(2) - 4.0 * a * c;
-        // Check that ray hits the sphere
-        if discriminant < 0.0 { return None }
-
-        // The distances from ray origin to intersection point
-        let (t1, t2) = (
-            (-b + discriminant.sqrt()) / (2.0 * a),
-            (-b - discriminant.sqrt()) / (2.0 * a)
-        );
-
-        // Check that the intersection is greater than minimum and select the
-        // intersection closest to ray origin
-        // TODO Is this tmin float-comparison accurate enough?
-        let opt = if tmin < t1 && t1 < t2 { Some(t1) } 
-            else if  tmin < t2 && t2 < t1 { Some(t2) } 
-            else { None };
-
-        if let Some(t) = opt {
-            let point = ray.cast(t);
-            let normal = (point - self.origin).normalized();
-            Some(
-                Intersection {
-                    t,
-                    point,
-                    normal,
-                    material: self.material.unwrap_or_default() 
-                }
-            )
-        } else {
-            None
-        }
-    }
-}
-
-/// A plane
-pub struct Plane {
+fn plane_intersect(
+    ray: &Ray,
+    tmin: f32,
     offset: f32,
     normal: UnitVector3,
     material: Option<Material>,
-}
+) -> Option<Intersection> {
+    let denominator = ray.direction.dot(&normal);
 
-impl TryFrom<&mut serde_json::Value> for Plane {
-    type Error = serde_json::Error;
+    // This checks inequality to 0 in floating point
+    if denominator < -f32::EPSILON || f32::EPSILON < denominator {
+        // Single point of intersection
 
-    fn try_from(
-        json: &mut serde_json::Value,
-    ) -> Result<Self,serde_json::Error> {
-        let offset = serde_json::from_value(json["offset"].take())?;
-        let material = serde_json::from_value(json["material"].take()).ok();
-        let mut normal: Vector3 =
-            serde_json::from_value(json["normal"].take())?;
-
-        //normal = &rot_y * &normal;
-        //normal = &rot_x * &normal;
-
-        Ok(Plane { offset, normal: normal.normalized(), material })
-    }
-}
-
-impl Intersect for Plane {
-    fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
-        let denominator = ray.direction.dot(&self.normal);
-
-        // This checks inequality to 0 in floating point
-        if denominator < -f32::EPSILON || f32::EPSILON < denominator {
-            // Single point of intersection
-
-            let nominator = {
-                let v: Vector3 = self.normal.into();
-                let c = self.offset + v.dot(&ray.origin);
-                -c
-            };
-            let t = nominator / denominator;
-            if tmin < t {
-                return Some(
-                    Intersection {
-                        t,
-                        point: ray.cast(t),
-                        normal: self.normal,
-                        material: self.material.unwrap_or_default(),
-                    }
-                )
-            }
-        }
-
-        // Line is parallel to plane and if contained in it, the infinitely
-        // thin plane will be invisible
-        // (or more likely, the intersection is too close)
-        None
-    }
-}
-
-/// A triangle
-pub struct Triangle {
-    vertices: [Vector3;3],
-    normal: UnitVector3,
-    material: Option<Material>,
-}
-
-impl TryFrom<&mut serde_json::Value> for Triangle {
-    type Error = serde_json::Error;
-
-    fn try_from(
-        json: &mut serde_json::Value,
-    ) -> Result<Self,serde_json::Error> {
-        let mut vertices: [Vector3;3] =
-            serde_json::from_value(json["vertices"].take())?;
-
-        //for v in vertices.iter_mut() {
-        //    *v = &rot_y * v;
-        //    *v = &rot_json * v;
-        //}
-
-        // NOTE Order of vertices is relevant for the normal
-        // Here the right hand rule is used (counter clockwise order)
-        let u = vertices[1] - vertices[0];
-        let v = vertices[2] - vertices[0];
-        let normal = Vector3::cross(&u, &v).normalized();
-        let material = serde_json::from_value(json["material"].take()).ok();
-
-        Ok(Triangle { vertices, normal, material })
-    }
-}
-
-impl Intersect for Triangle {
-    fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
-        // Algorithm from:
-        // https://courses.cs.washington.edu/courses/cse557/09au/lectures/extras/triangle_intersection.pdf
-
-        // Line plane intersection:
-        let normal: Vector3 = self.normal.into();
-        // d = n * A, any vertex A will do as they are on the triangle plane
-        let d = normal.dot(&self.vertices[0]);
-        let denom = normal.dot(&ray.direction.into());
-
-        // If ray and normal are orthogonal, then plane and ray are parallel
-        if -f32::EPSILON <= denom && denom <= f32::EPSILON {
-            return None
-        }
-
-        let t = (d - normal.dot(&ray.origin)) / denom;
-
-        let q = ray.cast(t);
-
-        // Check that q lies on triangle plane; "inside-outside" test
-        let ba = self.vertices[1] - self.vertices[0];
-        let cb = self.vertices[2] - self.vertices[1];
-        let ac = self.vertices[0] - self.vertices[2];
-        let qa = q - self.vertices[0];
-        let qb = q - self.vertices[1];
-        let qc = q - self.vertices[2];
-        let x1 = Vector3::cross(&ba, &qa).dot(&normal);
-        let x2 = Vector3::cross(&cb, &qb).dot(&normal);
-        let x3 = Vector3::cross(&ac, &qc).dot(&normal);
-        if tmin <= t && x1 >= 0.0 && x2 >= 0.0 && x3 >= 0.0 {
+        let nominator = {
+            let v: Vector3 = normal.into();
+            let c = offset + v.dot(&ray.origin);
+            -c
+        };
+        let t = nominator / denominator;
+        if tmin < t {
             return Some(
                 Intersection {
                     t,
-                    point: q,
-                    normal: self.normal,
-                    material: self.material.unwrap_or_default(),
+                    incoming: ray.direction,
+                    point: ray.cast(t),
+                    normal: normal,
+                    material: material.unwrap_or_default(),
                 }
             )
         }
-        None
-
-        // TODO
-        //let a = SquareMatrix3::from([
-        //    self.vertices[0] - self.vertices[1],
-        //	self.vertices[0] - self.vertices[2],
-        //	ray.direction.into(),
-        //]).transposed();
-
-        //let a_minus_ro = self.vertices[0] - ray.origin;
-
-        //let beta_numerator = SquareMatrix3::from([
-        //	a_minus_ro,
-        //	a.col(1), // col(1)
-        //	ray.direction.into(),
-        //]).transposed();
-
-        //let gamma_numerator = SquareMatrix3::from([
-        //	a.col(0), // col(0)
-        //	a_minus_ro,
-        //	ray.direction.into(),
-        //]).transposed();
-
-        //let t_numerator = SquareMatrix3::from([
-        //	a.col(0), // col(0)
-        //	a.col(1), // col(1)
-        //	a_minus_ro,
-        //]).transposed();
-
-        //// All of type f32
-        //let a_determinant = a.determinant();
-        //let beta = beta_numerator.determinant() / a_determinant;
-        //let gamma = gamma_numerator.determinant() / a_determinant;
-        //let t = t_numerator.determinant() / a_determinant;
-        //let alpha = 1.0 - beta - gamma;
-
-        //if 0.0 <= alpha && 0.0 <= beta && 0.0 <= gamma {
-        //	let sum_of_baryms = alpha + beta + gamma;
-        //	if 1.0 - f32::EPSILON <= sum_of_baryms
-        //        && sum_of_baryms <= 1.0 + f32::EPSILON
-        //        && tmin <= t {
-        //        //let interpolated_normal =
-        //        //    alpha * self.normals[0]
-        //        //    + beta * self.normals[1]
-        //        //    + gamma * self.normals[2];
-        //        return Some(
-        //                Intersection {
-        //                t,
-        //                point: ray.cast(t),
-        //                normal: self.normal, //interpolated_normal,
-        //                material: self.material,
-        //            }
-        //        )
-        //    }
-        //}
-        //None
     }
+
+    // Line is parallel to plane and if contained in it, the infinitely
+    // thin plane will be invisible
+    // (or more likely, the intersection is too close)
+    None
+}
+
+fn triangle_intersect(
+    ray: &Ray,
+    tmin: f32,
+    vertices: [Vector3;3],
+    normal: UnitVector3,
+    material: Option<Material>,
+) -> Option<Intersection> {
+    // Algorithm from:
+    // https://courses.cs.washington.edu/courses/cse557/09au/lectures/extras/triangle_intersection.pdf
+
+    // Line plane intersection:
+    let normal_v: Vector3 = normal.into();
+    // d = n * A, any vertex A will do as they are on the triangle plane
+    let d = normal_v.dot(&vertices[0]);
+    let denom = normal_v.dot(&ray.direction.into());
+
+    // If ray and normal are orthogonal, then plane and ray are parallel
+    if -f32::EPSILON <= denom && denom <= f32::EPSILON {
+        return None
+    }
+
+    let t = (d - normal_v.dot(&ray.origin)) / denom;
+
+    let q = ray.cast(t);
+
+    // Check that q lies on triangle plane; "inside-outside" test
+    let ba = vertices[1] - vertices[0];
+    let cb = vertices[2] - vertices[1];
+    let ac = vertices[0] - vertices[2];
+    let qa = q - vertices[0];
+    let qb = q - vertices[1];
+    let qc = q - vertices[2];
+    let x1 = Vector3::cross(&ba, &qa).dot(&normal_v);
+    let x2 = Vector3::cross(&cb, &qb).dot(&normal_v);
+    let x3 = Vector3::cross(&ac, &qc).dot(&normal_v);
+    if tmin <= t && x1 >= 0.0 && x2 >= 0.0 && x3 >= 0.0 {
+        return Some(
+            Intersection {
+                t,
+                incoming: ray.direction,
+                point: q,
+                normal,
+                material: material.unwrap_or_default(),
+            }
+        )
+    }
+    None
+
+    // TODO
+    //let a = SquareMatrix3::from([
+    //    vertices[0] - vertices[1],
+    //	vertices[0] - vertices[2],
+    //	ray.direction.into(),
+    //]).transposed();
+
+    //let a_minus_ro = vertices[0] - ray.origin;
+
+    //let beta_numerator = SquareMatrix3::from([
+    //	a_minus_ro,
+    //	a.col(1), // col(1)
+    //	ray.direction.into(),
+    //]).transposed();
+
+    //let gamma_numerator = SquareMatrix3::from([
+    //	a.col(0), // col(0)
+    //	a_minus_ro,
+    //	ray.direction.into(),
+    //]).transposed();
+
+    //let t_numerator = SquareMatrix3::from([
+    //	a.col(0), // col(0)
+    //	a.col(1), // col(1)
+    //	a_minus_ro,
+    //]).transposed();
+
+    //// All of type f32
+    //let a_determinant = a.determinant();
+    //let beta = beta_numerator.determinant() / a_determinant;
+    //let gamma = gamma_numerator.determinant() / a_determinant;
+    //let t = t_numerator.determinant() / a_determinant;
+    //let alpha = 1.0 - beta - gamma;
+
+    //if 0.0 <= alpha && 0.0 <= beta && 0.0 <= gamma {
+    //	let sum_of_baryms = alpha + beta + gamma;
+    //	if 1.0 - f32::EPSILON <= sum_of_baryms
+    //        && sum_of_baryms <= 1.0 + f32::EPSILON
+    //        && tmin <= t {
+    //        //let interpolated_normal =
+    //        //    alpha * normals[0]
+    //        //    + beta * normals[1]
+    //        //    + gamma * normals[2];
+    //        return Some(
+    //                Intersection {
+    //                t,
+    //                point: ray.cast(t),
+    //                normal: normal, //interpolated_normal,
+    //                material: material,
+    //            }
+    //        )
+    //    }
+    //}
+    //None
 }

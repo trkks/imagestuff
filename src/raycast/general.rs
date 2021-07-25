@@ -1,12 +1,21 @@
 use std::convert::TryFrom;
+use serde_json::{
+    from_value,
+    Value as SerdeValue,
+    Error as SerdeError};
+
+use crate::utils;
 use crate::raycast::{
-    vector3::{Vector3, UnitVector3},
     ray::Ray,
+    vector::{Vector4, Vector3, UnitVector3},
+    matrix::SquareMatrix4,
 };
+
 
 #[derive(Debug)]
 pub struct Intersection {
     pub t: f32,
+    pub incoming: UnitVector3,
     pub point: Vector3,
     pub normal: UnitVector3,
     pub material: Material,
@@ -14,6 +23,70 @@ pub struct Intersection {
 
 pub trait Intersect {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection>;
+}
+
+// TODO It isn't exactly good to parse a matrix from some invented language
+impl TryFrom<&str> for SquareMatrix4 {
+    type Error = String; // TODO ParseError
+
+    fn try_from(parse_string: &str) -> Result<Self, Self::Error> {
+        let mat = parse_string.trim().split_terminator(';')
+            .map(|s| {
+                let s = s.trim();
+                if s.starts_with("Translate") {
+                    let v: Vec<f32> = s[s.find('e').unwrap() + 1..]
+                        .split_ascii_whitespace()
+                        .map(|q| q.trim().parse::<f32>().unwrap()) //TODO
+                        .collect();
+                    SquareMatrix4::translation(
+                        Vector4 { x: v[0], y: v[1], z: v[2], w: 1.0 }
+                    )
+                } else if s.starts_with("RotX") {
+                    let rads = utils::degs_to_rads(s[s.find('X').unwrap() + 1..]
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap()); //TODO
+                    SquareMatrix4::rot_x(rads)
+                } else if s.starts_with("RotY") {
+                    let rads = utils::degs_to_rads(s[s.find('Y').unwrap() + 1..]
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap()); //TODO
+                    SquareMatrix4::rot_y(rads)
+                } else if s.starts_with("RotZ") {
+                    let rads = utils::degs_to_rads(s[s.find('Z').unwrap() + 1..]
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap()); //TODO
+                    SquareMatrix4::rot_z(rads)
+                } else if s.starts_with("Scale") {
+                    let v: Vec<f32> = s[s.find('e').unwrap() + 1..]
+                        .split_ascii_whitespace()
+                        .map(|q| q.trim().parse::<f32>().unwrap()) // TODO
+                        .collect();
+                    if let [a] = v[0..] {
+                        // Scale all 3 dimensions the same
+                        SquareMatrix4::scale(
+                            Vector4 { x: a, y: a, z: a, w: a }
+                        )
+                    } else if let [x, y, z] = v[0..] {
+                        // Scale each differently
+                        SquareMatrix4::scale(
+                            Vector4 { x, y, z, w: 1.0 }
+                        )
+                    } else {
+                        // TODO return Err
+                        panic!("Insufficient number of scaling values")
+                    }
+                } else {
+                    // TODO return Err
+                    panic!("Transformation not found '{}'", s)
+                }
+            })
+            .fold(SquareMatrix4::identity(), |acc, x| &acc * &x);
+
+        Ok(mat)
+    }
 }
 
 #[derive(serde::Deserialize,Copy,Clone)]
@@ -34,18 +107,14 @@ pub struct Light {
     pub color: color::Color,
     pub intensity: f32,
 }
-impl TryFrom<&mut serde_json::Value> for Light {
-    type Error = serde_json::Error;
 
-    fn try_from(
-        json: &mut serde_json::Value
-    ) -> Result<Self,serde_json::Error> {
-        let color = serde_json::from_value(json["color"].take())?;
-        let intensity = serde_json::from_value(json["intensity"].take())?;
-        let mut position = serde_json::from_value(json["position"].take())?;
+impl TryFrom<SerdeValue> for Light {
+    type Error = SerdeError;
 
-        //position = &rot_y * &position;
-        //position = &rot_x * &position;
+    fn try_from(mut json: SerdeValue) -> Result<Self, SerdeError> {
+        let color = from_value(json["color"].take())?;
+        let intensity = from_value(json["intensity"].take())?;
+        let position = from_value(json["position"].take())?;
 
         Ok(Light { position, _direction: None, color, intensity })
     }
@@ -53,7 +122,8 @@ impl TryFrom<&mut serde_json::Value> for Light {
 
 pub mod color {
     use crate::raycast::{
-        vector3::Vector3,
+        vector::{Vector3, Vector4},
+        matrix::SquareMatrix4,
     };
     use image::Rgb;
     #[allow(dead_code)]
@@ -80,12 +150,25 @@ pub mod color {
 
     impl From<Color> for Rgb<u16> { 
         fn from(c: Color) -> Self {
-            let (r,g,b) = (c.0.x, c.0.y, c.0.z);
-            Rgb(
-                [ (r * (u16::MAX as f32)) as u16,
-                  (g * (u16::MAX as f32)) as u16,
-                  (b * (u16::MAX as f32)) as u16 ]
-            )
+            // Conversion matrix values from:
+            // www.scratchapixel.com/lessons/digital-imaging/colors/color-space
+            const XYZ_TO_RGB: SquareMatrix4 = SquareMatrix4([
+                [ 2.3706743, -0.9000405, -0.4706338, 0.0],
+                [-0.5138850,  1.4253036,  0.0885814, 0.0],
+                [ 0.0052982, -0.0146949,  1.0093968, 0.0],
+                [       0.0,        0.0,        0.0, 1.0],
+            ]);
+
+            // XYZ color to RGB. Convert to Vector4 because matrix multip.
+            // TODO/FIXME is the way `Color` is used actually according to XYZ?
+            let Vector4 { x: r, y: g, z: b, w: _ } =
+                &XYZ_TO_RGB * &Vector4::from_v3(c.0, 1.0);
+
+            Rgb([
+                (r.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
+                (g.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
+                (b.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
+            ])
         }
     }
 
@@ -109,3 +192,4 @@ pub mod color {
         }
     }
 }
+

@@ -1,75 +1,52 @@
-use std::convert::TryFrom;
 use crate::raycast::{
-    vector3::{Vector3, UnitVector3},
+    vector::{Vector3, UnitVector3},
     ray::Ray,
 };
 
 #[derive(Debug)]
 pub struct PerspectiveCamera {
-    position: Vector3,
-    direction: UnitVector3,
     horizontal: UnitVector3,
     up: UnitVector3,
-    fov: f32,
-    view_bounds: (f32, f32), // Range where 0 represents the CAMERA POSITION
+    direction: UnitVector3,
+    position: Vector3,
+    dist_to_image: f32,
+    aspect_ratio: f32,
 }
 impl PerspectiveCamera {
-    pub fn new(
-        position: Vector3,
-        direction: UnitVector3,
-        up: UnitVector3,
-        fov: f32,
-        view_bounds: (f32, f32)
-    ) -> Self {
-        // Create a basis for camera
-        let horizontal = direction.cross(&up);
-        let up         = horizontal.cross(&direction);
+    /// Constructs a "normalized"(?) camera, meaning it points along the
+    /// negative z-axis and is placed at [0, 0, 1], a unit away from the origin
+    /// (at which the image plane is assumed to be).
+    ///
+    /// A custom field of view `fov` is given in radians and the image plane's
+    /// aspect ratio is calculated from `image_width` and `image_height`.
+    pub fn with_view(fov: f32, image_width: f32, image_height: f32) -> Self {
+        let horizontal = Vector3 { x: 1.0, y: 0.0, z: 0.0 }.normalized();
+        let up         = Vector3 { x: 0.0, y: 1.0, z: 0.0 }.normalized();
+        let direction  = Vector3 { x: 0.0, y: 0.0, z: -1.0 }.normalized();
+        let position   = Vector3 { x: 0.0, y: 0.0, z: 1.0 };
+
+        // NOTE This assumes that x and y on image plane will be in [-1, 1]
+        let dist_to_image = 1.0 / f32::tan(fov / 2.0);
+
+        let aspect_ratio = image_width / image_height;
 
         PerspectiveCamera {
-            position,
-            direction,
             horizontal,
             up,
-            fov,
-            view_bounds
+            direction,
+            position,
+            dist_to_image,
+            aspect_ratio,
         }
     }
 
-    pub fn shoot_at(&self, x: f32, y: f32, aspect: f32) -> Ray {
-        // NOTE This assumes that x and y have been scaled into [-1, 1]
-        let z = 1.0 / f32::tan(self.fov / 2.0);
-
+    pub fn shoot_at(&self, x: f32, y: f32) -> Ray {
         // Generate ray from camera to the image plane
-        // FIXME Why does this work? My understanding is that aspect ratio
-        // should be multiplied to the vertical-term and not the
-        // horizontal-term like here
-        let ray_direction =   x * self.horizontal * aspect
+        let ray_direction =   x * self.horizontal * self.aspect_ratio
                             + y * self.up
-                            + z * self.direction
+                            + self.dist_to_image * self.direction
                             - self.position;
 
         Ray { origin: self.position, direction: ray_direction.normalized() }
-    }
-}
-
-impl TryFrom<serde_json::Value> for PerspectiveCamera {
-    type Error = serde_json::Error;
-    fn try_from(
-        mut json: serde_json::Value
-    ) -> Result<Self, serde_json::Error> {
-        const TO_RADS: f32 = std::f32::consts::PI / 180.0;
-        let position = serde_json::from_value(json["position"].take())?;
-        let direction = {
-            let v: Vector3 = serde_json::from_value(json["direction"].take())?;
-            v.normalized()
-        };
-        let up = {
-            let v: Vector3 = serde_json::from_value(json["up"].take())?;
-            v.normalized()
-        };
-        let fov = serde_json::from_value::<f32>(json["fov"].take())? * TO_RADS;
-        let view_bounds = serde_json::from_value(json["view_bounds"].take())?;
-
-        Ok(Self::new(position, direction, up, fov, view_bounds))
     }
 }
