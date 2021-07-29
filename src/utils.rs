@@ -1,19 +1,23 @@
 use std::io::Write;
+
 use image::io::{Reader as ImageReader};
 use image::DynamicImage;
 
 
-// Utility for loading an image from filepath into a DynamicImage
-pub fn open_decode(file: &str) -> Result<DynamicImage, String> {
-    println!("Loading image {}", &file);
-    ImageReader::open(&file)
+/// Utility for loading an image from filepath into a DynamicImage
+pub fn open_decode<P>(path: P) -> Result<DynamicImage, String>
+where
+    P: AsRef<std::path::Path> + std::fmt::Debug,
+{
+    println!("Loading image {:?}", path);
+    ImageReader::open(path)
         .map_err(|e| e.to_string())?
         .decode()
         .map_err(|e| e.to_string())
 }
 
-// If dirname directory does not exists under current directory, prompt to
-// create it. Return True if exists or created
+/// If dirname directory does not exists under current directory, prompt to
+/// create it. Return True if exists or created
 pub fn confirm_dir(dirname: &str) -> Result<(), String> {
     let dir = dirname;
 

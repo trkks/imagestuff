@@ -5,7 +5,7 @@ use std::io::Write;
 use image::Rgb;
 use terminal_toys::ProgressBar;
 
-use crate::utils;
+use imagestuff::utils;
 
 
 pub struct AsciiConfig {
@@ -17,6 +17,9 @@ pub struct AsciiConfig {
 
 impl AsciiConfig {
     pub fn new(mut args: env::Args) -> Result<Self, String> {
+        // Skip executable name
+        args.next();
+
         let source_file = match args.next() {
             // Source file's path is saved as OS specific absolute path
             Some(path) => PathBuf::from(&path).canonicalize()
@@ -42,8 +45,8 @@ impl AsciiConfig {
     }
 }
 
-pub fn run(args: env::Args) -> Result<(), String> {
-    let config = AsciiConfig::new(args).map_err(|e| e.to_string())?;
+pub fn main() -> Result<(), String> {
+    let config = AsciiConfig::new(env::args()).map_err(|e| e.to_string())?;
     ascii_image(
         config.source_file.to_str().unwrap(), 
         config.width,

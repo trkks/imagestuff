@@ -11,9 +11,6 @@ started out as an automation tool for making fades between animation frames,
 but could now be better suited for low-to-no-control superimposement of images
 ":D")
 
-### cursed
-Does some shifty stuff with an images pixels; throwaway.
-
 ### raycast
 Makes an image that contains a scene with reflective spheres. (Based on code
 translated from an old university course assignment)

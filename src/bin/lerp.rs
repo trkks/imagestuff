@@ -2,7 +2,7 @@ use std::env;
 use image::Rgb as Rgb;
 use terminal_toys::ProgressBar;
 
-use crate::utils;
+use imagestuff::utils;
 
 type ImgBuffer16 = image::ImageBuffer<Rgb<u16>, Vec<u16>>;
 
@@ -12,7 +12,9 @@ pub struct LerpConfig {
 }
 
 impl LerpConfig {
-    pub fn new(args: env::Args) -> Result<Self, String> {
+    pub fn new(mut args: env::Args) -> Result<Self, String> {
+        // Skip executable name
+        args.next();
         let filepaths: Vec<String> = args.collect();
         if filepaths.len() < 2 {
             return Err(
@@ -23,8 +25,8 @@ impl LerpConfig {
     }
 }
 
-pub fn run(args: env::Args) -> Result<(), String> {
-    let config = LerpConfig::new(args).map_err(|e| e.to_string())?;
+pub fn main() -> Result<(), String> {
+    let config = LerpConfig::new(env::args()).map_err(|e| e.to_string())?;
 
     // TODO Lerp based on the size of first input ie. squeeze/stretch to fit
 

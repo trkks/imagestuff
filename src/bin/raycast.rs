@@ -1,22 +1,7 @@
-mod general;
-mod objects;
-mod vector;
-mod matrix;
-mod camera;
-mod ray;
-mod group;
-mod scene;
-
-pub use general::*;
-
-use crate::utils;
-use crate::raycast::{
-    scene::Scene,
-    camera::PerspectiveCamera,
-};
+use imagestuff::utils;
+use imagestuff::raycast::{scene::Scene, camera::PerspectiveCamera};
 
 use std::convert::{TryFrom};
-use std::env::{Args};
 use std::io::{Read};
 use std::fs::{File};
 use image::{ImageBuffer, Rgb};
@@ -24,10 +9,13 @@ use serde_json;
 
 type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
 
-pub fn run(mut args: Args) -> Result<(), String> {
+pub fn main() -> Result<(), String> {
     let output_dir = "renders";
     utils::confirm_dir(output_dir)?;
 
+    let mut args = std::env::args();
+    // Skip executable name
+    args.next();
     // Load view from file
     let filepath = args.next()
         .ok_or(format!("A source file for the scene is needed"))?;
