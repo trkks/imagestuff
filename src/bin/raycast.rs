@@ -1,5 +1,5 @@
 use imagestuff::utils;
-use imagestuff::raycast::{scene::Scene, camera::PerspectiveCamera};
+use imagestuff::raycast::{color, scene::Scene, camera::PerspectiveCamera};
 
 use std::convert::{TryFrom};
 use std::io::{Read};
@@ -41,16 +41,25 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let image = RgbImage::from_fn(width as u32, height as u32, |ix, iy| {
         let _ = progress_bar.print_update();
 
-        // Calculate image plane coordinates x,y so that they're in [-1, 1]
-        let x: f32 = ix as f32 / width  as f32 * 2.0 - 1.0;
-        // y is negated to transform from raster-space (ie. origin top left)
-        // into screen-space (origin bottom left)
-        let y: f32 = -(iy as f32 / height as f32 * 2.0 - 1.0);
-        let ray = camera.shoot_at(x, y);
+        // Anti-aliasing: n random samples per pixel
+        let n = 100;
+        let mut color = color::consts::BLACK;
+        for _ in 0..n {
+            let (rx, ry) = (rand::random::<f32>(), rand::random::<f32>());
 
-        // Shade the pixel with RGB color; 6 traces/reflections are made for
-        // each intersection
-        Rgb::<u8>::from(scene.trace(&ray, 6))
+            // Calculate image plane coordinates x,y so that they're in [-1, 1]
+            let x: f32 = (ix as f32 + rx) / width as f32 * 2.0 - 1.0;
+            // y is negated to transform from raster-space (ie. origin top left)
+            // into screen-space (origin bottom left)
+            let y: f32 = -((iy as f32 + ry) / height as f32 * 2.0 - 1.0);
+
+            let ray = camera.shoot_at(x, y);
+            color += &scene.trace(&ray, 6);
+        }
+
+        // Shade the pixel with RGB color; 6 traces/reflections made for each
+        // intersection; take average for anti-aliasing
+        Rgb::<u8>::from(color * (1.0 / n as f32))
     });
 
     // Write to image file

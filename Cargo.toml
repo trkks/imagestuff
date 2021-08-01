@@ -10,5 +10,6 @@ edition = "2018"
 image = "0.23.14"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.64"
+rand = "0.8.3"
 
 terminal_toys = { git = "https://github.com/trkks/terminal_toys", branch = "main" }
