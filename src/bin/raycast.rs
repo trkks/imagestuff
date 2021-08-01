@@ -4,12 +4,11 @@ use imagestuff::raycast::{scene::Scene, camera::PerspectiveCamera};
 use std::convert::{TryFrom};
 use std::io::{Read};
 use std::fs::{File};
-use image::{ImageBuffer, Rgb};
+use image::{RgbImage, Rgb};
 use serde_json;
 
-type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
 
-pub fn main() -> Result<(), String> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output_dir = "renders";
     utils::confirm_dir(output_dir)?;
 
@@ -39,7 +38,7 @@ pub fn main() -> Result<(), String> {
     // Render:
     let mut progress_bar = terminal_toys::ProgressBar::new(width * height, 25);
     progress_bar.title("Rendering");
-    let image = ImgBuffer16::from_fn(width as u32, height as u32, |ix, iy| {
+    let image = RgbImage::from_fn(width as u32, height as u32, |ix, iy| {
         let _ = progress_bar.print_update();
 
         // Calculate image plane coordinates x,y so that they're in [-1, 1]
@@ -51,7 +50,7 @@ pub fn main() -> Result<(), String> {
 
         // Shade the pixel with RGB color; 6 traces/reflections are made for
         // each intersection
-        Rgb::<u16>::from(scene.trace(&ray, 6))
+        Rgb::<u8>::from(scene.trace(&ray, 6))
     });
 
     // Write to image file
@@ -60,17 +59,21 @@ pub fn main() -> Result<(), String> {
     print!("\nSaving to {} ", result_file);
 
     terminal_toys::start_spinner(|| image.save(result_file))
-        .map_err(|e| format!("Failed to save {}", e))
+        // Apparently the compiler cannot infer without forcing with `as` and
+        // just calling `Box::<dyn std::error::Error>::new` isn't possible
+        // because Error does not implement Sized
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
-fn load_scene(filepath: &str) -> Result<Scene, String> {
-    let mut file = File::open(filepath).map_err(|e| e.to_string())?;
+fn load_scene(filepath: &str) -> Result<Scene, Box<dyn std::error::Error>> {
+    let mut file = File::open(filepath)?;
 
     let mut contents = String::from("");
-    file.read_to_string(&mut contents).map_err(|e| e.to_string())?;
+    file.read_to_string(&mut contents)?;
 
     let mut json: serde_json::Value =
-        serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+        serde_json::from_str(&contents)?;
 
-    Scene::try_from(&mut json).map_err(|e| e.to_string())
+    Scene::try_from(&mut json)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
