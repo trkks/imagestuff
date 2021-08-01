@@ -1,6 +1,3 @@
-use std::convert::TryFrom;
-use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
-
 use crate::raycast::{
     general::{
         Intersect,
@@ -11,6 +8,7 @@ use crate::raycast::{
     vector::{Vector3, UnitVector3},
 };
 
+#[derive(serde::Deserialize)]
 pub enum Object3D {
     Sphere {
         origin: Vector3,
@@ -27,45 +25,6 @@ pub enum Object3D {
         normal: UnitVector3,
         material: Option<Material>,
     },
-}
-
-impl<'a> TryFrom<SerdeValue> for Object3D {
-    type Error = SerdeError;
-
-    fn try_from(mut json: SerdeValue) -> Result<Self, SerdeError> {
-        from_value(json["type"].take()).map(|s: String|
-            match s.to_lowercase().as_str() {
-                "sphere" => {
-                    let origin   = from_value(json["origin"].take())?;
-                    let radius   = from_value(json["radius"].take())?;
-                    let material = from_value(json["material"].take()).ok();
-                    Ok(Self::Sphere { origin, radius, material })
-                },
-                "plane" => {
-                    let offset = from_value(json["offset"].take())?;
-                    let normal = {
-                        let v: Vector3 = from_value(json["normal"].take())?;
-                        v.normalized()
-                    };
-                    let material = from_value(json["material"].take()).ok();
-
-                    Ok(Self::Plane { offset, normal, material })
-                },
-                "triangle" => {
-                    let vertices: [Vector3;3] =
-                        from_value(json["vertices"].take())?;
-                    // NOTE Order of vertices is relevant for the normal. Here
-                    // the right hand rule is used (counter clockwise order)
-                    let u = vertices[1] - vertices[0];
-                    let v = vertices[2] - vertices[0];
-                    let normal = Vector3::cross(&u, &v).normalized();
-                    let material = from_value(json["material"].take()).ok();
-                    Ok(Self::Triangle { vertices, normal, material })
-                },
-                _ => panic!("Unrecognized 3D object type '{}'", s),
-            }
-        )?
-    }
 }
 
 impl Intersect for Object3D {

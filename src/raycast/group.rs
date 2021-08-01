@@ -43,11 +43,7 @@ impl<T: Intersect> Intersect for Group<T> {
     }
 }
 
-impl<T> TryFrom<SerdeValue> for Group<T>
-where
-    T: TryFrom<SerdeValue>,
-    <T as TryFrom<SerdeValue>>::Error: std::fmt::Debug,
-{
+impl<T: serde::de::DeserializeOwned> TryFrom<SerdeValue> for Group<T> {
     type Error = SerdeError;
 
     fn try_from(mut json: SerdeValue) -> Result<Self, Self::Error> {
@@ -61,11 +57,7 @@ where
                 .inversed()
         };
 
-        let mut members = Vec::with_capacity(128);
-        for obj in from_value::<Vec<SerdeValue>>(json["objects"].take())? {
-            let t = T::try_from(obj).unwrap();
-            members.push(t);
-        }
+        let members = from_value(json["objects"].take())?;
 
         Ok(Group { transformation, members } )
     }
