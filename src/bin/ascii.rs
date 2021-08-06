@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
-use image::Rgb;
+use image::{Rgb, Pixel};
 use terminal_toys::ProgressBar;
 
 use imagestuff::utils;
@@ -98,26 +98,30 @@ fn ascii_image(
         .map_err(|e| e.to_string())
 }
 
-// Get ascii character that looks like the brightness of the pixel
+/// Get an ascii character that looks like the brightness of the pixel.
+/// If not `inverted`, the text is white on dark background and vice versa.
 fn pixel_to_ascii(pixel: Rgb<u16>, inverted: bool) -> char {
-    // Divide by more (0.2) than count (3) to make slightly darker
-    let brightness = (pixel[0] as f32 / u16::MAX as f32 +
-                      pixel[1] as f32 / u16::MAX as f32 +
-                      pixel[2] as f32 / u16::MAX as f32) / 3.2;
+    const SHADES: [char; 8] = [' ', '-', '~', '=', 'o', '0', '@', '#'];
 
+    let brightness = pixel.to_luma().0[0] as f32 / u16::MAX as f32;
+    let i = (brightness * (SHADES.len() - 1) as f32) as usize;
 
-    let shades = if inverted {
-        ['#', '@', '0', 'o', '=', '~', '-', ' ']
-    } else {
-        [' ', '-', '~', '=', 'o', '0', '@', '#']
-    };
+    SHADES[if inverted { SHADES.len() - 1 - i } else { i }]
+}
 
-    if 0.875 <= brightness { shades[0] } else
-    if 0.750 <= brightness { shades[1] } else
-    if 0.625 <= brightness { shades[2] } else
-    if 0.500 <= brightness { shades[3] } else
-    if 0.375 <= brightness { shades[4] } else
-    if 0.250 <= brightness { shades[5] } else
-    if 0.125 <= brightness { shades[6] } else
-                           { shades[7] }
+#[cfg(test)]
+mod tests {
+    use image::Rgb;
+    use super::pixel_to_ascii;
+    #[test]
+    fn test_pixel_to_ascii() {
+        let n = u16::MAX;
+        assert_eq!(pixel_to_ascii(Rgb([n, n, n]), false),             '#');
+        assert_eq!(pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), false), '=');
+        assert_eq!(pixel_to_ascii(Rgb([0, 0, 0]), false),             ' ');
+
+        assert_eq!(pixel_to_ascii(Rgb([n, n, n]), true),             ' ');
+        assert_eq!(pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), true), 'o');
+        assert_eq!(pixel_to_ascii(Rgb([0, 0, 0]), true),             '#');
+    }
 }
