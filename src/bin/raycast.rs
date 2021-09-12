@@ -2,7 +2,7 @@ use imagestuff::utils;
 use imagestuff::raycast::{color, scene::Scene, camera::PerspectiveCamera};
 
 use std::convert::{TryFrom};
-use std::io::{Read};
+use std::io::{self, Read, Write};
 use std::fs::{File};
 use image::{RgbImage, Rgb};
 use serde_json;
@@ -42,7 +42,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = progress_bar.print_update();
 
         // Anti-aliasing: n random samples per pixel
-        let n = 100;
+        let n = 25;
         let mut color = color::consts::BLACK;
         for _ in 0..n {
             let (rx, ry) = (rand::random::<f32>(), rand::random::<f32>());
@@ -67,11 +67,25 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         output_dir, utils::filename(&filepath)?, width, height);
     print!("\nSaving to {} ", result_file);
 
-    terminal_toys::start_spinner(|| image.save(result_file))
-        // Apparently the compiler cannot infer without forcing with `as` and
-        // just calling `Box::<dyn std::error::Error>::new` isn't possible
-        // because Error does not implement Sized
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    // Saving could fail for example if a previous file is open; ask to retry
+    while let Err(e)
+        = terminal_toys::start_spinner(|| image.save(&result_file))
+    {
+        println!("There was an error saving the render: {}", e);
+        let mut stdout = io::stdout();
+        let _ = stdout.write(b"Try saving again? [Y/n]>");
+        let _ = stdout.flush();
+        let mut buffer = String::new();
+        let _ = io::stdin().read_line(&mut buffer);
+        if buffer.starts_with("n") {
+            println!("Discarding the render and exiting with error");
+            // Apparently the compiler cannot infer without forcing with `as`
+            // and just calling `Box::<dyn std::error::Error>::new` isn't
+            // possible because Error does not implement Sized
+            return Err(Box::new(e) as Box<dyn std::error::Error>)
+        }
+    }
+    Ok(())
 }
 
 fn load_scene(filepath: &str) -> Result<Scene, Box<dyn std::error::Error>> {
