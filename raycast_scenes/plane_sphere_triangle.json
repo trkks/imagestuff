@@ -1,65 +1,78 @@
 {
     "fov": 90,
-    "ambient_color": [0.05, 0.05, 0.05],
+    "ambient_color": [12, 12, 12],
+
     "lights": [
         {
-            "objects": [
-                {
-                    "position": [0, 3, 4],
-                    "color": [1, 1, 1],
-                    "intensity": 1
-                }
-            ]
+            "position": [0, 3, 4],
+            "color": [255, 255, 255],
+            "intensity": 1
         }
     ],
-    "3d": [
+
+    "named": {},
+
+    "objects": [
         {
             "transform": "Translate 0 -0.5 -2",
-            "objects": [
-                {
-                    "type": "sphere",
-                    "origin": [0.80, 0, 0],
-                    "radius": 0.5,
-                    "material": {
-                        "color": [0.9, 0.1, 0.4],
-                        "shininess": 10
-                    }
-                },
-                {
-                    "type": "sphere",
-                    "origin": [-0.45, 0, 0.5],
-                    "radius": 0.5,
-                    "material": {
-                        "color": [0.4, 0.1, 0.9],
-                        "shininess": 10
-                    }
+            "object": {
+                "Raw": {
+                    "Composite": [
+                        {
+                            "Sphere": {
+                                "origin": [0.80, 0, 0],
+                                "radius": 0.5,
+                                "material": {
+                                    "color": [229, 25, 102],
+                                    "shininess": 10
+                                }
+                            }
+                        },
+                        {
+                            "Sphere": {
+                                "origin": [-0.45, 0, 0.5],
+                                "radius": 0.5,
+                                "material": {
+                                    "color": [102, 25, 229],
+                                    "shininess": 10
+                                }
+                            }
+                        }
+                    ]
                 }
-            ]
+            }
         },
         {
-            "objects": [
-                {
-                    "type": "plane",
-                    "offset": 1,
-                    "normal": [0, 1, 0]
-                }
-            ]
-        },
-        {
-            "objects": [
-                {
-                    "type": "triangle",
-                    "vertices": [
-                        [   0,-0.05, -1.4],
-                        [ 0.3, 0.45, -0.4],
-                        [-0.3, 0.45, -0.2]
-                    ],
-                    "material": {
-                        "color": [0.1, 0.3, 0.7],
-                        "shininess": 1
+            "object": {
+                "Raw": {
+                    "Primitive": {
+                        "Plane": {
+                            "offset": 1,
+                            "normal": [0, 1, 0]
+                        }
                     }
                 }
-            ]
+            }
+        },
+        {
+            "object": {
+                "Raw": {
+                    "Primitive": {
+                        "Triangle": {
+                            "vertices": [
+                                [   0,-0.05, -1.4],
+                                [ 0.3, 0.45, -0.4],
+                                [-0.3, 0.45, -0.2]
+                            ],
+                            "normal": [0, 0, 1],
+                            "material": {
+                                "color": [25, 76, 178],
+                                "shininess": 1
+                            }
+                        }
+                    }
+                }
+            }
         }
     ]
 }

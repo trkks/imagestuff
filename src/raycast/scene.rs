@@ -1,21 +1,38 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
 use crate::utils;
 use crate::raycast::{
     general::{color::Color, Light, Intersect, Intersection},
-    group::Group,
+    vector::Vector3,
     ray::Ray,
-    objects::Object3D,
-    vector::{Vector3, Vector4},
+    objects::{TransformableObject3D, Object3D},
 };
 
-/// A collection of transformable object-groups
+/// With this the scene description can specify the *object* and opt-in to have
+/// a *transform* on each object (ie. the description does not _require_ a
+/// transform field for any object)
+#[derive(serde::Deserialize)]
+struct TransformableObject3DRecord {
+    #[serde(default)] // Uses Option<T>::default() if not present
+    transform: Option<String>,
+    object: Object3DRecord,
+}
+/// With this, `TransformableObject3DRecord` can specify objects either based on
+/// string names pointing to predefined objects or describing them then and
+/// there directly
+#[derive(serde::Deserialize)]
+enum Object3DRecord {
+    Named(String),
+    Raw(Object3D),
+}
+
+/// A collection of things used in rendering a scene
 pub struct Scene {
     pub ambient_color: Color,
     pub fov: f32,
-    lights: Vec<Group<Light>>,
-    objects: Vec<Group<Object3D>>,
+    lights: Vec<Light>,
+    objects: Vec<TransformableObject3D>
 }
 
 impl Scene {
@@ -33,48 +50,43 @@ impl Scene {
                 let off_surface =
                     intr.point + (intr.normal * 0.0001);
 
-                for Group { transformation, members } in &self.lights {
-                    for light in members {
-                        let (light_distance, towards_light) = {
-                            // The light's position must be transformed first
-                            let v4 = &Vector4::from_v3(light.position, 1.0);
-                            let v = (transformation * v4).xyz() - intr.point;
-                            (v.length(), v.normalized())
+                for light in &self.lights {
+                    let (light_distance, towards_light) = {
+                        let v = light.position - intr.point;
+                        (v.length(), v.normalized())
+                    };
+
+                    // Shadows:
+                    let shadow_ray = Ray {
+                        origin: off_surface,
+                        direction: towards_light,
+                    };
+
+                    // If shadow ray does not cast shadow, color the point
+                    if self.intersect(&shadow_ray, f32::EPSILON).is_none() {
+                        // Shading model from:
+                        // http://www.cs.cornell.edu/courses/cs4620/2014fa/lectures/05rt-shading.pdf
+                        let intensity = light.intensity / light_distance;
+                        let bisector = {
+                            let v: Vector3 = (-intr.incoming).into();
+                            let w: Vector3 = towards_light.into();
+                            (v + w).normalized()
                         };
 
-                        // Shadows:
-                        let shadow_ray = Ray::with_transform(
-                            off_surface,
-                            towards_light,
-                            transformation
-                        );
-
-                        // If shadow ray does not cast shadow, color the point
-                        if self.intersect(&shadow_ray, f32::EPSILON).is_none() {
-                            // Shading model from:
-                            // http://www.cs.cornell.edu/courses/cs4620/2014fa/lectures/05rt-shading.pdf
-                            let intensity = light.intensity / light_distance;
-                            let bisector = {
-                                let v: Vector3 = (-intr.incoming).into();
-                                let w: Vector3 = towards_light.into();
-                                (v + w).normalized()
-                            };
-
-                            let d = intr.normal.dot(&towards_light);
-                            if d >= 0.0 {
-                                let s = intr.normal.dot(&bisector);
-                                color += &(
-                                    // Diffuse
-                                      intr.material.color
-                                    * intensity
-                                    * d
-                                    // Specular
-                                    + light.color
-                                    * intensity
-                                    * f32::max(0.0, s)
-                                       .powi(intr.material.shininess)
-                                );
-                            }
+                        let d = intr.normal.dot(&towards_light);
+                        if d >= 0.0 {
+                            let s = intr.normal.dot(&bisector);
+                            color += &(
+                                // Diffuse
+                                  intr.material.color
+                                * intensity
+                                * d
+                                // Specular
+                                + light.color
+                                * intensity
+                                * f32::max(0.0, s)
+                                   .powi(intr.material.shininess)
+                            );
                         }
                     }
                 }
@@ -97,24 +109,53 @@ impl Scene {
 impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
     type Error = SerdeError;
 
-    fn try_from(json: &'a mut SerdeValue) -> Result<Self,SerdeError> {
+    /// # Panics:
+    /// This panics if the json description is invalid
+    fn try_from(json: &'a mut SerdeValue) -> Result<Self, SerdeError> {
         let ambient_color = from_value(json["ambient_color"].take())?;
 
         // NOTE `fov` is turned into radians from the degrees in JSON
         let fov = utils::degs_to_rads(from_value(json["fov"].take())?);
 
-        // NOTE Bad groups cause panic
-        let lights: Vec<Group<Light>> = 
-            from_value::<Vec<SerdeValue>>(json["lights"].take())?
-            .into_iter()
-            .map(|x| Group::try_from(x).unwrap())
-            .collect();
+        // TODO The scene is described in JSON with different intersectable
+        // objects named by the user. Here those names are turned into indices
+        // into the said objects ie. the actual objects are allocated once and
+        // in rendering used multiple times with different transformations
 
-        let objects: Vec<Group<Object3D>> = 
-            from_value::<Vec<SerdeValue>>(json["3d"].take())?
-            .into_iter()
-            .map(|x| Group::try_from(x).unwrap())
-            .collect();
+        let lights: Vec<Light> = from_value(json["lights"].take())?;
+
+        let objects = {
+            let named: std::collections::HashMap<String, Object3D> =
+                from_value(json["named"].take())?;
+
+            from_value::<Vec<TransformableObject3DRecord>>(
+                    json["objects"].take()
+                )?
+                .iter()
+                .map(|TransformableObject3DRecord{ transform, object }| {
+                    // Parse transform matrix from string
+                    let transform = transform.as_ref().map(|s|
+                        s[..].try_into().expect("Bad transform string")
+                    );
+                    // Either choose the Raw object or clone if Named
+                    // TODO implement reference counted version for named here
+                    // (now, calling to_owned clones)
+                    let object = match object {
+                        Object3DRecord::Raw(o) => o.to_owned(),
+                        Object3DRecord::Named(s) => {
+                            named.get(s)
+                                .expect(format!(
+                                        "The named object '{}' is not found \
+                                        in the 'objects' field", s
+                                    ).as_str()
+                                )
+                                .to_owned()
+                        },
+                    };
+                    TransformableObject3D::new(transform, object)
+                })
+                .collect()
+        };
 
         Ok(Scene { ambient_color, fov, lights, objects })
     }
@@ -124,7 +165,7 @@ impl Intersect for Scene {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         //TODO intersect lights? (simulate a lens as glass sphere over camera)
         self.objects.iter()
-            .filter_map(|group| group.intersect(&ray, tmin))
+            .filter_map(|x| x.intersect(&ray, tmin))
             .reduce(|acc, x| if x.t < acc.t { x } else { acc })
     }
 }

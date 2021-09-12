@@ -4,12 +4,75 @@ use crate::raycast::{
         Intersection,
         Material
     },
+    matrix,
     ray::Ray,
-    vector::{Vector3, UnitVector3},
+    vector::{Vector3, UnitVector3, Vector4},
 };
 
-#[derive(serde::Deserialize)]
+/// Either a single 3D primitive (eg. sphere, plane) or a collection composed
+/// of multiple primitives (eg. a pyramid made from triangles)
+#[derive(serde::Deserialize, Clone)]
 pub enum Object3D {
+    Primitive(Primitive3D),
+    Composite(Vec<Primitive3D>),
+}
+
+pub struct TransformableObject3D {
+    transform: Option<matrix::SquareMatrix4>,
+    object: Object3D,
+}
+
+// TODO This would require less memory (ie. not copying Object3D::Composites)
+// if `object` was an Rc<Object3D>?
+impl TransformableObject3D {
+    pub fn new(
+        mut transform: Option<matrix::SquareMatrix4>,
+        object: Object3D
+    ) -> Self {
+        if transform.is_some() {
+            // Inversed here in advance, because always used so
+            transform = transform.map(|t| t.inversed());
+        }
+        Self { transform,  object }
+    }
+}
+
+impl Intersect for TransformableObject3D {
+    fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
+        let choose_intersect = |object: &Object3D, r| match object {
+            Object3D::Composite(xs) => {
+                xs.iter()
+                    .filter_map(|obj| obj.intersect(r, tmin))
+                    // Select the intersection closest to ray
+                    .reduce(|acc, x| if x.t < acc.t { x } else { acc })
+            },
+            Object3D::Primitive(x) => {
+                x.intersect(r, tmin)
+            }
+        };
+
+        if let Some(t) = &self.transform {
+            let ray = Ray::with_transform(ray.origin, ray.direction, &t);
+            choose_intersect(&self.object, &ray)
+            // Transform the intersection normal to object space
+            .map(|mut intr| {
+                let normal_v4 = Vector4::from_v3(intr.normal.into(), 0.0);
+                // TODO Is this transformation right? (see also ray.rs)
+                intr.normal = (&t.transposed() * &normal_v4)
+                    .xyz()
+                    .normalized();
+
+                intr
+            })
+        } else {
+            choose_intersect(&self.object, ray)
+        }
+    }
+}
+
+
+#[derive(serde::Deserialize, Clone)]
+pub enum Primitive3D {
     Sphere {
         origin: Vector3,
         radius: f32,
@@ -27,7 +90,7 @@ pub enum Object3D {
     },
 }
 
-impl Intersect for Object3D {
+impl Intersect for Primitive3D {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         match *self {
             Self::Sphere { origin, radius, material } =>

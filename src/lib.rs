@@ -7,7 +7,6 @@ pub mod raycast {
     pub mod matrix;
     pub mod camera;
     pub mod ray;
-    pub mod group;
     pub mod scene;
 
     // Re-export all stuff in general
