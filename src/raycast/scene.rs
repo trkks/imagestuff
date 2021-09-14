@@ -1,4 +1,5 @@
 use std::convert::{TryFrom, TryInto};
+use std::collections;
 use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
 use crate::utils;
@@ -6,26 +7,9 @@ use crate::raycast::{
     general::{color::Color, Light, Intersect, Intersection},
     vector::Vector3,
     ray::Ray,
-    objects::{TransformableObject3D, Object3D},
+    objects::{self, TransformableObject3D, Object3D},
 };
 
-/// With this the scene description can specify the *object* and opt-in to have
-/// a *transform* on each object (ie. the description does not _require_ a
-/// transform field for any object)
-#[derive(serde::Deserialize)]
-struct TransformableObject3DRecord {
-    #[serde(default)] // Uses Option<T>::default() if not present
-    transform: Option<String>,
-    object: Object3DRecord,
-}
-/// With this, `TransformableObject3DRecord` can specify objects either based on
-/// string names pointing to predefined objects or describing them then and
-/// there directly
-#[derive(serde::Deserialize)]
-enum Object3DRecord {
-    Named(String),
-    Raw(Object3D),
-}
 
 /// A collection of things used in rendering a scene
 pub struct Scene {
@@ -117,45 +101,85 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
         // NOTE `fov` is turned into radians from the degrees in JSON
         let fov = utils::degs_to_rads(from_value(json["fov"].take())?);
 
-        // TODO The scene is described in JSON with different intersectable
-        // objects named by the user. Here those names are turned into indices
-        // into the said objects ie. the actual objects are allocated once and
-        // in rendering used multiple times with different transformations
+        // The scene is described in JSON with different intersectable objects
+        // named by the user. Here those names are turned into indices into the
+        // said objects ie. the actual objects are allocated once and in
+        // rendering used multiple times with different transformations
 
         let lights: Vec<Light> = from_value(json["lights"].take())?;
 
-        let objects = {
-            let named: std::collections::HashMap<String, Object3D> =
-                from_value(json["named"].take())?;
+        let mut named = collections::HashMap::new();
+        if let SerdeValue::Object(map) = json["named"].take() {
+            named.reserve(map.len());
+            for (key, value) in map {
+                let object = if value.is_object() {
+                    Object3D::Single(
+                        from_value::<objects::Primitive3D>(value)?
+                    )
+                } else if value.is_array() {
+                    Object3D::Composite(
+                        from_value::<Vec<objects::Primitive3D>>(value)?
+                    )
+                } else {
+                    panic!("The key '{}' in 'named' does not match to an \
+                            object or array", key)
+                };
 
-            from_value::<Vec<TransformableObject3DRecord>>(
-                    json["objects"].take()
-                )?
-                .iter()
-                .map(|TransformableObject3DRecord{ transform, object }| {
-                    // Parse transform matrix from string
-                    let transform = transform.as_ref().map(|s|
-                        s[..].try_into().expect("Bad transform string")
+                named.insert(key.to_string(), object);
+            }
+        } else {
+            panic!("The key 'named' does not match to an object")
+        }
+
+        let mut objects = Vec::new();
+        if let SerdeValue::Array(vec) = json["objects"].take() {
+            objects.reserve(vec.len());
+            for (i, mut value) in vec.into_iter().enumerate() {
+                // Parse transform matrix from string
+                let transform = from_value::<Option<String>>(
+                        value["transform"].take()
+                    )?
+                    .as_ref()
+                    .map(|s| s[..].try_into()
+                        .expect(
+                            format!("Bad transform string on the {} item in \
+                                    'objects'", i).as_str()
+                        )
                     );
-                    // Either choose the Raw object or clone if Named
-                    // TODO implement reference counted version for named here
-                    // (now, calling to_owned clones)
-                    let object = match object {
-                        Object3DRecord::Raw(o) => o.to_owned(),
-                        Object3DRecord::Named(s) => {
-                            named.get(s)
-                                .expect(format!(
-                                        "The named object '{}' is not found \
-                                        in the 'objects' field", s
-                                    ).as_str()
-                                )
-                                .to_owned()
-                        },
-                    };
-                    TransformableObject3D::new(transform, object)
-                })
-                .collect()
-        };
+
+                // Either create the raw object or choose from named ones
+                let object = {
+                    let obj = value["object"].take();
+                    if obj.is_object() {
+                        Object3D::Single(
+                            from_value::<objects::Primitive3D>(obj)?
+                        )
+                    } else if obj.is_array() {
+                        Object3D::Composite(
+                            from_value::<Vec<objects::Primitive3D>>(obj)?
+                        )
+                    } else if obj.is_string() {
+                        // Pick the object from the map of named ones
+                        // TODO implement reference counted version for named
+                        // here (now calling clone)
+                        let key = obj.as_str().unwrap();
+                        named.get(key)
+                            .expect(
+                                format!("The key '{}' is not found in \
+                                        'objects'", key).as_str()
+                            )
+                            .clone()
+                    } else {
+                        panic!("The {} item in 'objects' is not an object,
+                                array or string", i)
+                    }
+                };
+
+                objects.push(TransformableObject3D::new(transform, object));
+            }
+        } else {
+            panic!("The key 'objects' does not match to an array")
+        }
 
         Ok(Scene { ambient_color, fov, lights, objects })
     }

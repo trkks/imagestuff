@@ -11,12 +11,13 @@ use crate::raycast::{
 
 /// Either a single 3D primitive (eg. sphere, plane) or a collection composed
 /// of multiple primitives (eg. a pyramid made from triangles)
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
 pub enum Object3D {
-    Primitive(Primitive3D),
+    Single(Primitive3D),
     Composite(Vec<Primitive3D>),
 }
 
+#[derive(Debug)]
 pub struct TransformableObject3D {
     transform: Option<matrix::SquareMatrix4>,
     object: Object3D,
@@ -46,7 +47,7 @@ impl Intersect for TransformableObject3D {
                     // Select the intersection closest to ray
                     .reduce(|acc, x| if x.t < acc.t { x } else { acc })
             },
-            Object3D::Primitive(x) => {
+            Object3D::Single(x) => {
                 x.intersect(r, tmin)
             }
         };
@@ -71,7 +72,7 @@ impl Intersect for TransformableObject3D {
 }
 
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
 pub enum Primitive3D {
     Sphere {
         origin: Vector3,

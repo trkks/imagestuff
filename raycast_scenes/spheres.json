@@ -1,5 +1,5 @@
 {
-    "fov": 120,
+    "fov": 100,
     "ambient_color": [0, 0, 0],
 
     "lights": [
@@ -20,128 +20,96 @@
     "objects": [
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Sphere": {
-                            "origin": [0.20,-0.15, 0.2],
-                            "radius": 0.12,
-                            "material": {
-                                "color": [204, 0, 0],
-                                "shininess": 100
-                            }
-                        }
+                "Sphere": {
+                    "origin": [0.20,-0.15, 0.3],
+                    "radius": 0.12,
+                    "material": {
+                        "color": [204, 0, 0],
+                        "shininess": 100
                     }
                 }
             }
         },
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Sphere": {
-                            "origin": [-0.20,-0.10, 0.2],
-                            "radius": 0.05,
-                            "material": {
-                                "color": [0, 153, 0],
-                                "shininess": 1
-                            }
-                        }
+                "Sphere": {
+                    "origin": [-0.20,-0.10, 0.3],
+                    "radius": 0.05,
+                    "material": {
+                        "color": [0, 153, 0],
+                        "shininess": 1
                     }
                 }
             }
         },
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Sphere": {
-                            "origin": [-0.05, 0.15, 0.2],
-                            "radius": 0.1,
-                            "material": {
-                                "color": [0, 0, 178],
-                                "shininess": 1
-                            }
-                        }
+                "Sphere": {
+                    "origin": [-0.05, 0.15, 0.3],
+                    "radius": 0.1,
+                    "material": {
+                        "color": [0, 0, 178],
+                        "shininess": 1
                     }
                 }
             }
         },
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Plane": {
-                            "offset": 1,
-                            "normal": [2, 0, 1],
-                            "material": {
-                                "color": [0,0,0],
-                                "shininess": 1
-                            }
-                        }
+                "Plane": {
+                    "offset": 1,
+                    "normal": [2, 0, 1],
+                    "material": {
+                        "color": [0,0,0],
+                        "shininess": 1
                     }
                 }
             }
         },
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Plane": {
-                            "offset": 1,
-                            "normal": [-2, 0, 1],
-                            "material": {
-                                "color": [0,0,0],
-                                "shininess": 1
-                            }
-                        }
+                "Plane": {
+                    "offset": 1,
+                    "normal": [-2, 0, 1],
+                    "material": {
+                        "color": [0,0,0],
+                        "shininess": 1
                     }
                 }
             }
         },
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Plane": {
-                            "offset": 1,
-                            "normal": [0.0, 2, 1],
-                            "material": {
-                                "color": [0,0,0],
-                                "shininess": 1
-                            }
-                        }
+                "Plane": {
+                    "offset": 1,
+                    "normal": [0.0, 2, 1],
+                    "material": {
+                        "color": [0,0,0],
+                        "shininess": 1
                     }
                 }
             }
         },
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Plane": {
-                            "offset": 1,
-                            "normal": [0.0, -2, 1],
-                            "material": {
-                                "color": [0,0,0],
-                                "shininess": 1
-                            }
-                        }
+                "Plane": {
+                    "offset": 1,
+                    "normal": [0.0, -2, 1],
+                    "material": {
+                        "color": [0,0,0],
+                        "shininess": 1
                     }
                 }
             }
         },
         {
             "object": {
-                "Raw": {
-                    "Primitive": {
-                        "Plane": {
-                            "offset": 0.8,
-                            "normal": [0, 0, 1],
-                            "material": {
-                                "color": [255, 255, 0],
-                                "shininess": 1
-                            }
-                        }
+                "Plane": {
+                    "offset": 0.8,
+                    "normal": [0, 0, 1],
+                    "material": {
+                        "color": [255, 255, 0],
+                        "shininess": 1
                     }
                 }
             }
