@@ -88,6 +88,17 @@ impl Scene {
         // End recursion:
         color
     }
+
+    pub fn color_debug(&self, ray: &Ray) -> Color {
+        // TODO is epsilon needed here?
+        return if let Some(intr) = self.intersect(&ray, f32::EPSILON) {
+            // Color according to normal
+            let Vector3 { x, y, z } = intr.normal.into();
+            Color::new(x, y, z)
+        } else {
+            self.ambient_color
+        }
+    }
 }
 
 impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
