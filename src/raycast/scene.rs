@@ -4,10 +4,10 @@ use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
 use crate::utils;
 use crate::raycast::{
-    general::{color::Color, Light, Intersect, Intersection},
+    general::{color::Color, Light, Intersect, Intersection, Material},
     vector::Vector3,
     ray::Ray,
-    objects::{self, TransformableObject3D, Object3D},
+    objects,
 };
 
 
@@ -16,7 +16,7 @@ pub struct Scene {
     pub ambient_color: Color,
     pub fov: f32,
     lights: Vec<Light>,
-    objects: Vec<TransformableObject3D>
+    objects: Vec<objects::Object3D>
 }
 
 impl Scene {
@@ -112,20 +112,15 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
         if let SerdeValue::Object(map) = json["named"].take() {
             named.reserve(map.len());
             for (key, value) in map {
-                let object = if value.is_object() {
-                    Object3D::Single(
-                        from_value::<objects::Primitive3D>(value)?
-                    )
+                let obj = if value.is_object() {
+                    vec![from_value::<objects::Shape>(value)?]
                 } else if value.is_array() {
-                    Object3D::Composite(
-                        from_value::<Vec<objects::Primitive3D>>(value)?
-                    )
+                    from_value::<Vec<objects::Shape>>(value)?
                 } else {
                     panic!("The key '{}' in 'named' does not match to an \
                             object or array", key)
                 };
-
-                named.insert(key.to_string(), object);
+                named.insert(key.to_string(), obj);
             }
         } else {
             panic!("The key 'named' does not match to an object")
@@ -148,34 +143,31 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
                     );
 
                 // Either create the raw object or choose from named ones
-                let object = {
-                    let obj = value["object"].take();
-                    if obj.is_object() {
-                        Object3D::Single(
-                            from_value::<objects::Primitive3D>(obj)?
+                let object = if value["object"].is_object() {
+                    vec![from_value::<objects::Shape>(value["object"].take())?]
+                } else if value["object"].is_array() {
+                    from_value::<Vec<objects::Shape>>(value["object"].take())?
+                } else if value["object"].is_string() {
+                    // Pick the object from the map of named ones
+                    // TODO implement reference counted version for
+                    // named here (now calling clone)
+                    let key = from_value::<String>(value["object"].take())?;
+                    named.get(&key)
+                        .expect(
+                            format!("The key '{}' is not found in 'objects'",
+                                    key).as_str()
                         )
-                    } else if obj.is_array() {
-                        Object3D::Composite(
-                            from_value::<Vec<objects::Primitive3D>>(obj)?
-                        )
-                    } else if obj.is_string() {
-                        // Pick the object from the map of named ones
-                        // TODO implement reference counted version for named
-                        // here (now calling clone)
-                        let key = obj.as_str().unwrap();
-                        named.get(key)
-                            .expect(
-                                format!("The key '{}' is not found in \
-                                        'objects'", key).as_str()
-                            )
-                            .clone()
-                    } else {
-                        panic!("The {} item in 'objects' is not an object,
-                                array or string", i)
-                    }
+                        .clone()
+                } else {
+                    panic!("The {} 'object' in 'objects' is not an \
+                            object, array or string", i)
                 };
 
-                objects.push(TransformableObject3D::new(transform, object));
+                let material = from_value(value["material"].take())?;
+
+                objects.push(
+                    objects::Object3D::new(transform, object, material)
+                );
             }
         } else {
             panic!("The key 'objects' does not match to an array")

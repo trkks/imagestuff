@@ -9,107 +9,93 @@ use crate::raycast::{
     vector::{Vector3, UnitVector3, Vector4},
 };
 
-/// Either a single 3D primitive (eg. sphere, plane) or a collection composed
-/// of multiple primitives (eg. a pyramid made from triangles)
-#[derive(serde::Deserialize, Clone, Debug)]
-pub enum Object3D {
-    Single(Primitive3D),
-    Composite(Vec<Primitive3D>),
-}
-
 #[derive(Debug)]
-pub struct TransformableObject3D {
+pub struct Object3D {
     transform: Option<matrix::SquareMatrix4>,
-    object: Object3D,
+    object: Vec<Shape>,
+    material: Material,
 }
 
 // TODO This would require less memory (ie. not copying Object3D::Composites)
 // if `object` was an Rc<Object3D>?
-impl TransformableObject3D {
+impl Object3D {
     pub fn new(
-        mut transform: Option<matrix::SquareMatrix4>,
-        object: Object3D
+        transform: Option<matrix::SquareMatrix4>,
+        object: Vec<Shape>,
+        material: Option<Material>,
     ) -> Self {
-        if transform.is_some() {
-            // Inversed here in advance, because always used so
-            transform = transform.map(|t| t.inversed());
+        Self {
+            // Inverse transform here in advance, because always used so
+            transform: transform.map(|t| t.inversed()),
+            object,
+            material: material.unwrap_or_default(),
         }
-        Self { transform,  object }
     }
 }
 
-impl Intersect for TransformableObject3D {
+impl Intersect for Object3D {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
-        let choose_intersect = |object: &Object3D, r| match object {
-            Object3D::Composite(xs) => {
-                xs.iter()
-                    .filter_map(|obj| obj.intersect(r, tmin))
-                    // Select the intersection closest to ray
-                    .reduce(|acc, x| if x.t < acc.t { x } else { acc })
-            },
-            Object3D::Single(x) => {
-                x.intersect(r, tmin)
-            }
+        // Helper to reduce code duplication
+        let get_intersection = |r| {
+            self.object.iter()
+                .filter_map(|obj| match obj {
+                    &Shape::Sphere { origin, radius } => sphere_intersect(
+                        origin, radius, r, tmin, self.material
+                    ),
+                    &Shape::Plane { offset, normal } => plane_intersect(
+                        offset, normal, r, tmin, self.material
+                    ),
+                    &Shape::Triangle { vertices, normal } => triangle_intersect(
+                        vertices, normal, r, tmin, self.material
+                    ),
+                })
+                // Select the intersection closest to ray
+                .reduce(|acc, x| if x.t < acc.t { x } else { acc })
         };
 
         if let Some(t) = &self.transform {
             let ray = Ray::with_transform(ray.origin, ray.direction, &t);
-            choose_intersect(&self.object, &ray)
-            // Transform the intersection normal to object space
-            .map(|mut intr| {
-                let normal_v4 = Vector4::from_v3(intr.normal.into(), 0.0);
-                // TODO Is this transformation right? (see also ray.rs)
-                intr.normal = (&t.transposed() * &normal_v4)
-                    .xyz()
-                    .normalized();
+            get_intersection(&ray)
+                // If there was an intersection transform its normal to object
+                // space 
+                .map(|mut intr| {
+                    let normal_v4 = Vector4::from_v3(intr.normal.into(), 0.0);
+                    // TODO Is this transformation right? (see also ray.rs)
+                    intr.normal = (&t.transposed() * &normal_v4)
+                        .xyz()
+                        .normalized();
 
-                intr
-            })
+                    intr
+                })
         } else {
-            choose_intersect(&self.object, ray)
+            get_intersection(&ray)
         }
     }
 }
 
 
 #[derive(serde::Deserialize, Clone, Debug)]
-pub enum Primitive3D {
+pub enum Shape {
     Sphere {
         origin: Vector3,
         radius: f32,
-        material: Option<Material>,
     },
     Plane {
         offset: f32,
         normal: UnitVector3,
-        material: Option<Material>,
     },
     Triangle {
-        vertices: [Vector3;3],
+        vertices: [Vector3; 3],
         normal: UnitVector3,
-        material: Option<Material>,
     },
-}
-
-impl Intersect for Primitive3D {
-    fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
-        match *self {
-            Self::Sphere { origin, radius, material } =>
-                sphere_intersect(ray, tmin, origin, radius, material),
-            Self::Plane { offset, normal, material } =>
-                plane_intersect(ray, tmin, offset, normal, material),
-            Self::Triangle { vertices, normal, material } =>
-                triangle_intersect(ray, tmin, vertices, normal, material),
-        }
-    }
 }
 
 fn sphere_intersect(
-    ray: &Ray,
-    tmin: f32,
     origin: Vector3,
     radius: f32,
-    material: Option<Material>,
+    ray: &Ray,
+    tmin: f32,
+    material: Material,
 ) -> Option<Intersection> {
     // Calculate the items for quadratic formula
     let to_ray_origin = ray.origin - origin;
@@ -147,7 +133,7 @@ fn sphere_intersect(
                 incoming: ray.direction,
                 point,
                 normal,
-                material: material.unwrap_or_default()
+                material,
             }
         )
     } else {
@@ -156,11 +142,11 @@ fn sphere_intersect(
 }
 
 fn plane_intersect(
-    ray: &Ray,
-    tmin: f32,
     offset: f32,
     normal: UnitVector3,
-    material: Option<Material>,
+    ray: &Ray,
+    tmin: f32,
+    material: Material,
 ) -> Option<Intersection> {
     let denominator = ray.direction.dot(&normal);
 
@@ -181,7 +167,7 @@ fn plane_intersect(
                     incoming: ray.direction,
                     point: ray.cast(t),
                     normal: normal,
-                    material: material.unwrap_or_default(),
+                    material,
                 }
             )
         }
@@ -194,11 +180,11 @@ fn plane_intersect(
 }
 
 fn triangle_intersect(
-    ray: &Ray,
-    tmin: f32,
     vertices: [Vector3;3],
     normal: UnitVector3,
-    material: Option<Material>,
+    ray: &Ray,
+    tmin: f32,
+    material: Material,
 ) -> Option<Intersection> {
     // Algorithm from:
     // https://courses.cs.washington.edu/courses/cse557/09au/lectures/extras/triangle_intersection.pdf
@@ -235,7 +221,7 @@ fn triangle_intersect(
                 incoming: ray.direction,
                 point: q,
                 normal,
-                material: material.unwrap_or_default(),
+                material,
             }
         )
     }
