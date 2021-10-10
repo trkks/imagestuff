@@ -4,7 +4,7 @@ use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
 use crate::utils;
 use crate::raycast::{
-    general::{color::Color, Light, Intersect, Intersection, Material},
+    general::{color::Color, Light, Intersect, Intersection},
     vector::Vector3,
     ray::Ray,
     objects,
@@ -31,8 +31,7 @@ impl Scene {
                 // (see "shadow acne")
                 // NOTE The "bias" (ie. normal * epsilon) seems hard to get
                 // right
-                let off_surface =
-                    intr.point + (intr.normal * 0.0001);
+                let off_surface = intr.point + (intr.normal * 0.0001);
 
                 for light in &self.lights {
                     let (light_distance, towards_light) = {
@@ -81,7 +80,7 @@ impl Scene {
                     direction: intr.incoming.reflect(&intr.normal)
                 };
 
-                // Recursive call:
+                // Recursive call TODO Add attenuation from reflection
                 return color + self.trace(&reflected_ray, n - 1)
             }
         }
@@ -119,19 +118,28 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
 
         let lights: Vec<Light> = from_value(json["lights"].take())?;
 
-        let mut named = collections::HashMap::new();
+        // Helper for converting json into shapes choosing between object or
+        // array. If string, then just pull from the named-map at upper level
+        let shapes_from_json = |x: SerdeValue| {
+            if x.is_object() {
+                from_value::<objects::Shape>(x).map(|shape| vec![shape])
+            } else if x.is_array() {
+                from_value::<Vec<objects::Shape>>(x)
+            } else {
+                Err(<SerdeError as serde::de::Error>::custom(
+                    format!("Expected an object or array; got {}", x)
+                ))
+            }
+        };
+
+        // Form a collection of string:vec<shape> -pairs
+        let mut named: collections::HashMap::<String, Vec<objects::Shape>> 
+            = collections::HashMap::new();
         if let SerdeValue::Object(map) = json["named"].take() {
             named.reserve(map.len());
             for (key, value) in map {
-                let obj = if value.is_object() {
-                    vec![from_value::<objects::Shape>(value)?]
-                } else if value.is_array() {
-                    from_value::<Vec<objects::Shape>>(value)?
-                } else {
-                    panic!("The key '{}' in 'named' does not match to an \
-                            object or array", key)
-                };
-                named.insert(key.to_string(), obj);
+                let key = key.to_string();
+                named.insert(key, shapes_from_json(value)?);
             }
         } else {
             panic!("The key 'named' does not match to an object")
@@ -154,24 +162,24 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
                     );
 
                 // Either create the raw object or choose from named ones
-                let object = if value["object"].is_object() {
-                    vec![from_value::<objects::Shape>(value["object"].take())?]
-                } else if value["object"].is_array() {
-                    from_value::<Vec<objects::Shape>>(value["object"].take())?
-                } else if value["object"].is_string() {
-                    // Pick the object from the map of named ones
-                    // TODO implement reference counted version for
-                    // named here (now calling clone)
-                    let key = from_value::<String>(value["object"].take())?;
-                    named.get(&key)
-                        .expect(
-                            format!("The key '{}' is not found in 'objects'",
-                                    key).as_str()
+                let object = {
+                    let json_value = value["object"].take();
+                    if json_value.is_string() {
+                        // TODO Maybe reference count here instead of clone?
+                        let key: String = from_value(json_value)?;
+                        named.get(&key).expect(
+                            format!("The name {} is not found in map \
+                                    'named'", key)
+                                    .as_str()
+                            )
+                            .clone()
+                    } else {
+                        shapes_from_json(json_value).expect(
+                            format!("Failed with value corresponding to \
+                                    'object' on item {} in 'objects'", i)
+                                    .as_str()
                         )
-                        .clone()
-                } else {
-                    panic!("The {} 'object' in 'objects' is not an \
-                            object, array or string", i)
+                    }
                 };
 
                 let material = from_value(value["material"].take())?;
