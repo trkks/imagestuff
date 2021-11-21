@@ -68,6 +68,7 @@ fn get_path(x: &str, paths: &mut Vec<path::PathBuf>) {
 
 fn process(paths: Vec<path::PathBuf>) {
     println!("{:?}", paths);
+    let user_output = std::env::args().nth(1);
     // The resulting image will be sized by the maximum dimensions times the
     // number of input images
     let (max_width, max_height) = {
@@ -80,7 +81,10 @@ fn process(paths: Vec<path::PathBuf>) {
 
     // TODO organize width and height according to the wanted dimensions of the
     // resulting atlas
-    let mut result = image::ImageBuffer::new(max_width * paths.len() as u32, max_height);
+    let mut result = image::ImageBuffer::new(
+        max_width * paths.len() as u32,
+        max_height
+    );
 
     // Combine the images
     for i in 0..paths.len() {
@@ -88,5 +92,12 @@ fn process(paths: Vec<path::PathBuf>) {
         image::imageops::replace(&mut result, &image, i as u32 * max_width, 0);
     }
 
-    result.save("./pics/atlas_result.png").unwrap();
+    // Save the result to the wanted file if given
+    let output_path = user_output
+        .unwrap_or(String::from("./pics/atlas_result.png"));
+    println!("Saving to {}", output_path);
+    if let Err(e) = result.save(output_path) {
+        eprintln!("Failed to save: {}", e);
+        std::process::exit(1);
+    }
 }
