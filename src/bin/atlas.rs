@@ -28,6 +28,7 @@ fn piped_input() -> Option<Vec<path::PathBuf>> {
     let stdin = std::io::stdin();
     let mut input = String::new();
     let mut paths = Vec::new();
+    // FIXME if nothing is piped, blocks forever
     while let Ok(n) = stdin.read_line(&mut input) {
         if n > 0 {
             get_path(&input.trim(), &mut paths);
@@ -66,5 +67,26 @@ fn get_path(x: &str, paths: &mut Vec<path::PathBuf>) {
 }
 
 fn process(paths: Vec<path::PathBuf>) {
-    todo!()
+    println!("{:?}", paths);
+    // The resulting image will be sized by the maximum dimensions times the
+    // number of input images
+    let (max_width, max_height) = {
+        // TODO This could possibly be done simpler by scanning?
+        let (widths, heights): (Vec<u32>,Vec<u32>) = paths.iter()
+            .map(|x| image::image_dimensions(x).unwrap())
+            .unzip();
+        (*widths.iter().max().unwrap(), *heights.iter().max().unwrap())
+    };
+
+    // TODO organize width and height according to the wanted dimensions of the
+    // resulting atlas
+    let mut result = image::ImageBuffer::new(max_width * paths.len() as u32, max_height);
+
+    // Combine the images
+    for i in 0..paths.len() {
+        let image = utils::open_decode(&paths[i]).unwrap();
+        image::imageops::replace(&mut result, &image, i as u32 * max_width, 0);
+    }
+
+    result.save("./pics/atlas_result.png").unwrap();
 }
