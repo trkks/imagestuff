@@ -80,7 +80,6 @@ impl From<&UnitVector3> for Vector3 {
 }
 
 /// A 3D vector that is always normalized
-// TODO deserializing does not check for unit length
 #[derive(Copy,Clone,Debug)]
 pub struct UnitVector3(Vector3);
 impl UnitVector3 {
@@ -95,6 +94,16 @@ impl UnitVector3 {
         UnitVector3::from(self.0.cross(&other.0))
     }
 }
+
+impl<'de> serde::Deserialize<'de> for UnitVector3 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Vector3::deserialize(deserializer)?.normalized())
+    }
+}
+
 impl std::ops::Neg for UnitVector3 {
     type Output = Self;
     fn neg(self) -> Self::Output {

@@ -1,92 +1,101 @@
-use std::convert::TryFrom;
-use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
-
 use crate::raycast::{
     general::{
         Intersect,
         Intersection,
         Material
     },
+    matrix,
     ray::Ray,
-    vector::{Vector3, UnitVector3},
+    vector::{Vector3, UnitVector3, Vector4},
 };
 
-pub enum Object3D {
-    Sphere {
-        origin: Vector3,
-        radius: f32,
-        material: Option<Material>,
-    },
-    Plane {
-        offset: f32,
-        normal: UnitVector3,
-        material: Option<Material>,
-    },
-    Triangle {
-        vertices: [Vector3;3],
-        normal: UnitVector3,
-        material: Option<Material>,
-    },
+#[derive(Debug)]
+pub struct Object3D {
+    transform: Option<matrix::SquareMatrix4>,
+    object: Vec<Shape>,
+    material: Material,
 }
 
-impl<'a> TryFrom<SerdeValue> for Object3D {
-    type Error = SerdeError;
-
-    fn try_from(mut json: SerdeValue) -> Result<Self, SerdeError> {
-        from_value(json["type"].take()).map(|s: String|
-            match s.to_lowercase().as_str() {
-                "sphere" => {
-                    let origin   = from_value(json["origin"].take())?;
-                    let radius   = from_value(json["radius"].take())?;
-                    let material = from_value(json["material"].take()).ok();
-                    Ok(Self::Sphere { origin, radius, material })
-                },
-                "plane" => {
-                    let offset = from_value(json["offset"].take())?;
-                    let normal = {
-                        let v: Vector3 = from_value(json["normal"].take())?;
-                        v.normalized()
-                    };
-                    let material = from_value(json["material"].take()).ok();
-
-                    Ok(Self::Plane { offset, normal, material })
-                },
-                "triangle" => {
-                    let vertices: [Vector3;3] =
-                        from_value(json["vertices"].take())?;
-                    // NOTE Order of vertices is relevant for the normal. Here
-                    // the right hand rule is used (counter clockwise order)
-                    let u = vertices[1] - vertices[0];
-                    let v = vertices[2] - vertices[0];
-                    let normal = Vector3::cross(&u, &v).normalized();
-                    let material = from_value(json["material"].take()).ok();
-                    Ok(Self::Triangle { vertices, normal, material })
-                },
-                _ => panic!("Unrecognized 3D object type '{}'", s),
-            }
-        )?
+// TODO This would require less memory (ie. not copying Object3D::Composites)
+// if `object` was an Rc<Object3D>?
+impl Object3D {
+    pub fn new(
+        transform: Option<matrix::SquareMatrix4>,
+        object: Vec<Shape>,
+        material: Option<Material>,
+    ) -> Self {
+        Self {
+            // Inverse transform here in advance, because always used so
+            transform: transform.map(|t| t.inversed()),
+            object,
+            material: material.unwrap_or_default(),
+        }
     }
 }
 
 impl Intersect for Object3D {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
-        match *self {
-            Self::Sphere { origin, radius, material } =>
-                sphere_intersect(ray, tmin, origin, radius, material),
-            Self::Plane { offset, normal, material } =>
-                plane_intersect(ray, tmin, offset, normal, material),
-            Self::Triangle { vertices, normal, material } =>
-                triangle_intersect(ray, tmin, vertices, normal, material),
+        // Helper to reduce code duplication
+        let get_intersection = |r| {
+            self.object.iter()
+                .filter_map(|obj| match obj {
+                    &Shape::Sphere { origin, radius } => sphere_intersect(
+                        origin, radius, r, tmin, self.material
+                    ),
+                    &Shape::Plane { offset, normal } => plane_intersect(
+                        offset, normal, r, tmin, self.material
+                    ),
+                    &Shape::Triangle { vertices, normal } => triangle_intersect(
+                        vertices, normal, r, tmin, self.material
+                    ),
+                })
+                // Select the intersection closest to ray
+                .reduce(|acc, x| if x.t < acc.t { x } else { acc })
+        };
+
+        if let Some(t) = &self.transform {
+            let ray = Ray::with_transform(ray.origin, ray.direction, &t);
+            get_intersection(&ray)
+                // If there was an intersection transform its normal to object
+                // space 
+                .map(|mut intr| {
+                    let normal_v4 = Vector4::from_v3(intr.normal.into(), 0.0);
+                    // TODO Is this transformation right? (see also ray.rs)
+                    intr.normal = (&t.transposed() * &normal_v4)
+                        .xyz()
+                        .normalized();
+
+                    intr
+                })
+        } else {
+            get_intersection(&ray)
         }
     }
 }
 
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub enum Shape {
+    Sphere {
+        origin: Vector3,
+        radius: f32,
+    },
+    Plane {
+        offset: f32,
+        normal: UnitVector3,
+    },
+    Triangle {
+        vertices: [Vector3; 3],
+        normal: UnitVector3,
+    },
+}
+
 fn sphere_intersect(
-    ray: &Ray,
-    tmin: f32,
     origin: Vector3,
     radius: f32,
-    material: Option<Material>,
+    ray: &Ray,
+    tmin: f32,
+    material: Material,
 ) -> Option<Intersection> {
     // Calculate the items for quadratic formula
     let to_ray_origin = ray.origin - origin;
@@ -124,7 +133,7 @@ fn sphere_intersect(
                 incoming: ray.direction,
                 point,
                 normal,
-                material: material.unwrap_or_default()
+                material,
             }
         )
     } else {
@@ -133,11 +142,11 @@ fn sphere_intersect(
 }
 
 fn plane_intersect(
-    ray: &Ray,
-    tmin: f32,
     offset: f32,
     normal: UnitVector3,
-    material: Option<Material>,
+    ray: &Ray,
+    tmin: f32,
+    material: Material,
 ) -> Option<Intersection> {
     let denominator = ray.direction.dot(&normal);
 
@@ -158,7 +167,7 @@ fn plane_intersect(
                     incoming: ray.direction,
                     point: ray.cast(t),
                     normal: normal,
-                    material: material.unwrap_or_default(),
+                    material,
                 }
             )
         }
@@ -171,11 +180,11 @@ fn plane_intersect(
 }
 
 fn triangle_intersect(
-    ray: &Ray,
-    tmin: f32,
     vertices: [Vector3;3],
     normal: UnitVector3,
-    material: Option<Material>,
+    ray: &Ray,
+    tmin: f32,
+    material: Material,
 ) -> Option<Intersection> {
     // Algorithm from:
     // https://courses.cs.washington.edu/courses/cse557/09au/lectures/extras/triangle_intersection.pdf
@@ -212,7 +221,7 @@ fn triangle_intersect(
                 incoming: ray.direction,
                 point: q,
                 normal,
-                material: material.unwrap_or_default(),
+                material,
             }
         )
     }

@@ -171,6 +171,7 @@ name = "imagestuff"
 version = "0.1.0"
 dependencies = [
  "image",
+ "rand",
  "serde",
  "serde_json",
  "terminal_toys",

@@ -1,8 +1,4 @@
 use std::convert::TryFrom;
-use serde_json::{
-    from_value,
-    Value as SerdeValue,
-    Error as SerdeError};
 
 use crate::utils;
 use crate::raycast::{
@@ -89,8 +85,7 @@ impl TryFrom<&str> for SquareMatrix4 {
     }
 }
 
-#[derive(serde::Deserialize,Copy,Clone)]
-#[derive(Debug)]
+#[derive(serde::Deserialize, Copy, Clone, Debug)]
 pub struct Material {
     pub color: color::Color,
     pub shininess: i32,
@@ -101,6 +96,7 @@ impl std::default::Default for Material {
     }
 }
 
+#[derive(serde::Deserialize)]
 pub struct Light {
     pub position: Vector3,
     pub _direction: Option<Vector3>,
@@ -108,23 +104,8 @@ pub struct Light {
     pub intensity: f32,
 }
 
-impl TryFrom<SerdeValue> for Light {
-    type Error = SerdeError;
-
-    fn try_from(mut json: SerdeValue) -> Result<Self, SerdeError> {
-        let color = from_value(json["color"].take())?;
-        let intensity = from_value(json["intensity"].take())?;
-        let position = from_value(json["position"].take())?;
-
-        Ok(Light { position, _direction: None, color, intensity })
-    }
-}
-
 pub mod color {
-    use crate::raycast::{
-        vector::{Vector3, Vector4},
-        matrix::SquareMatrix4,
-    };
+    use crate::raycast::vector::Vector3;
     use image::Rgb;
     #[allow(dead_code)]
     pub mod consts {
@@ -139,36 +120,38 @@ pub mod color {
     }
 
     /// Newtype to have some vector operations on a separate Color type
-    #[derive(serde::Deserialize,Copy,Clone,Debug)]
+    #[derive(Copy, Clone, Debug)]
     pub struct Color(Vector3);
 
     impl Color {
         pub const fn new(r: f32, g: f32, b: f32) -> Self {
-            Color(Vector3 { x:r, y:g, z:b })
+            Color(Vector3 { x: r, y: g, z: b })
         }
     }
 
-    impl From<Color> for Rgb<u16> { 
+    impl From<Color> for Rgb<u8> {
         fn from(c: Color) -> Self {
-            // Conversion matrix values from:
-            // www.scratchapixel.com/lessons/digital-imaging/colors/color-space
-            const XYZ_TO_RGB: SquareMatrix4 = SquareMatrix4([
-                [ 2.3706743, -0.9000405, -0.4706338, 0.0],
-                [-0.5138850,  1.4253036,  0.0885814, 0.0],
-                [ 0.0052982, -0.0146949,  1.0093968, 0.0],
-                [       0.0,        0.0,        0.0, 1.0],
-            ]);
-
-            // XYZ color to RGB. Convert to Vector4 because matrix multip.
-            // TODO/FIXME is the way `Color` is used actually according to XYZ?
-            let Vector4 { x: r, y: g, z: b, w: _ } =
-                &XYZ_TO_RGB * &Vector4::from_v3(c.0, 1.0);
-
+            // Taking the square root applies "gamma 2"
             Rgb([
-                (r.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
-                (g.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
-                (b.clamp(0.0, 1.0) * (u16::MAX as f32)) as u16,
+                (c.0.x.clamp(0.0, 1.0).sqrt() * u8::MAX as f32) as u8,
+                (c.0.y.clamp(0.0, 1.0).sqrt() * u8::MAX as f32) as u8,
+                (c.0.z.clamp(0.0, 1.0).sqrt() * u8::MAX as f32) as u8,
             ])
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for Color {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            // Source file for scene has colors as triples of values 0 to 255
+            let (r, g, b) = <(u8,u8,u8)>::deserialize(deserializer)?;
+            Ok(Color(Vector3 {
+                x: r as f32 / u8::MAX as f32,
+                y: g as f32 / u8::MAX as f32,
+                z: b as f32 / u8::MAX as f32,
+            }))
         }
     }
 
@@ -186,9 +169,7 @@ pub mod color {
     }
     impl std::ops::AddAssign<&Color> for Color {
         fn add_assign(&mut self, other: &Color) {
-            self.0.x += other.0.x;
-            self.0.y += other.0.y;
-            self.0.z += other.0.z;
+            self.0 = self.0 + other.0;
         }
     }
 }

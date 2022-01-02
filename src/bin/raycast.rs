@@ -1,18 +1,18 @@
 use imagestuff::utils;
-use imagestuff::raycast::{scene::Scene, camera::PerspectiveCamera};
+use imagestuff::raycast::{color, scene::Scene, camera::PerspectiveCamera};
 
 use std::convert::{TryFrom};
-use std::io::{Read};
+use std::io::{self, Read, Write};
 use std::fs::{File};
-use image::{ImageBuffer, Rgb};
+use image::{RgbImage, Rgb};
 use serde_json;
 
 use terminal_toys as tt;
 
 
-type ImgBuffer16 = ImageBuffer::<Rgb<u16>, Vec<u16>>;
+const AA_ITERATION_COUNT: usize = 25;
 
-pub fn main() -> Result<(), String> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output_dir = "renders";
     utils::confirm_dir(output_dir)?;
 
@@ -63,20 +63,34 @@ pub fn main() -> Result<(), String> {
                 let start_coord = i * segment_height;
                 for iy in start_coord..start_coord + segment_height {
                     for ix in 0..width {
-                        // Calculate image plane coordinates x,y so that
-                        // they're in [-1, 1]
-                        let x: f32 = ix as f32 / width as f32 * 2.0 - 1.0;
-                        // y is negated to transform from raster-space (ie.
-                        // origin top left) into screen-space (origin bottom
-                        // left)
-                        let y: f32 = -(iy as f32 / height as f32 * 2.0 - 1.0);
-                        let ray = arc_camera.shoot_at(x, y);
+                        let mut color = color::consts::BLACK;
+                        for _ in 0..AA_ITERATION_COUNT {
+                            // Anti-aliasing: n random samples per pixel
+                            let (rx, ry) =
+                                (rand::random::<f32>(), rand::random::<f32>());
 
-                        img_vec.push(
+                            // Calculate image plane coordinates x,y so that
+                            // they're in [-1, 1]
+                            let x: f32 =
+                                (ix as f32 + rx) / width as f32 * 2.0 - 1.0;
+                            // y is negated to transform from raster-space (ie.
+                            // origin top left) into screen-space (origin
+                            // bottom left)
+                            let y: f32 =
+                                -((iy as f32 + ry) / height as f32 * 2.0 - 1.0);
+
+                            let ray = arc_camera.shoot_at(x, y);
+
                             // Shade the pixel with RGB color; 6
                             // traces/reflections are made for each
                             // intersection
-                            Rgb::<u16>::from(arc_scene.trace(&ray, 6))
+                            color += &arc_scene.trace(&ray, 6);
+                        }
+                        img_vec.push(
+                            Rgb::<u8>::from(
+                                // Take color's average for anti-aliasing
+                                color * (1.0 / AA_ITERATION_COUNT as f32)
+                            )
                         );
 
                         let _ = progress_bar.print_update_row(i + 1).unwrap();
@@ -96,7 +110,7 @@ pub fn main() -> Result<(), String> {
     }
     // Use `from_fn` instead of `from_vec` in order to not manually handle
     // unwrapping the Subpixel -associated-type
-    let image = ImgBuffer16::from_fn(
+    let image = RgbImage::from_fn(
         width as u32, height as u32,
         |ix, iy| img_combined[iy as usize * width + ix as usize]
     );
@@ -106,18 +120,36 @@ pub fn main() -> Result<(), String> {
         output_dir, utils::filename(&filepath)?, width, height);
     print!("\nSaving to {} ", result_file);
 
-    tt::start_spinner(|| image.save(result_file))
-        .map_err(|e| format!("Failed to save {}", e))
+    // Saving could fail for example if a previous file is open; ask to retry
+    while let Err(e)
+        = terminal_toys::start_spinner(|| image.save(&result_file))
+    {
+        println!("There was an error saving the render: {}", e);
+        let mut stdout = io::stdout();
+        let _ = stdout.write(b"Try saving again? [Y/n]>");
+        let _ = stdout.flush();
+        let mut buffer = String::new();
+        let _ = io::stdin().read_line(&mut buffer);
+        if buffer.starts_with("n") {
+            println!("Discarding the render and exiting with error");
+            // Apparently the compiler cannot infer without forcing with `as`
+            // and just calling `Box::<dyn std::error::Error>::new` isn't
+            // possible because Error does not implement Sized
+            return Err(Box::new(e) as Box<dyn std::error::Error>)
+        }
+    }
+    Ok(())
 }
 
-fn load_scene(filepath: &str) -> Result<Scene, String> {
-    let mut file = File::open(filepath).map_err(|e| e.to_string())?;
+fn load_scene(filepath: &str) -> Result<Scene, Box<dyn std::error::Error>> {
+    let mut file = File::open(filepath)?;
 
     let mut contents = String::from("");
-    file.read_to_string(&mut contents).map_err(|e| e.to_string())?;
+    file.read_to_string(&mut contents)?;
 
     let mut json: serde_json::Value =
-        serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+        serde_json::from_str(&contents)?;
 
-    Scene::try_from(&mut json).map_err(|e| e.to_string())
+    Scene::try_from(&mut json)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
