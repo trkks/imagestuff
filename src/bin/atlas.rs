@@ -71,6 +71,7 @@ fn process(paths: Vec<path::PathBuf>) {
     let user_output = std::env::args().nth(1);
     // The resulting image will be sized by the maximum dimensions times the
     // number of input images
+    // TODO Should the dimensions be decided based on the first image?
     let (max_width, max_height) = {
         // TODO This could possibly be done simpler by scanning?
         let (widths, heights): (Vec<u32>,Vec<u32>) = paths.iter()
@@ -93,6 +94,8 @@ fn process(paths: Vec<path::PathBuf>) {
     }
 
     // Save the result to the wanted file if given
+    // TODO Should the decided dimensions (size of a single "frame" and the
+    // table-configuration) be included to the filename?
     let output_path = user_output
         .unwrap_or(String::from("./pics/atlas_result.png"));
     println!("Saving to {}", output_path);
