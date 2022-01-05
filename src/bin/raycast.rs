@@ -4,6 +4,8 @@ use imagestuff::raycast::{color, scene::Scene, camera::PerspectiveCamera};
 use std::convert::{TryFrom};
 use std::io::{self, Read, Write};
 use std::fs::{File};
+use std::sync;
+
 use image::{RgbImage, Rgb};
 use serde_json;
 
@@ -23,7 +25,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let filepath = args.next()
         .ok_or(format!("A source file for the scene is needed"))?;
 
-    let scene = std::sync::Arc::new(
+    let scene = sync::Arc::new(
         load_scene(&filepath)
             .map_err(|e| format!("Loading scene failed - {}", e))?
     );
@@ -35,7 +37,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         _                  => (128, 128),
     };
 
-    let camera = std::sync::Arc::new(
+    let thread_count = match args.next() {
+        Some(a) => a.parse().unwrap(),
+        None    => 4,
+    };
+
+    let camera = sync::Arc::new(
         PerspectiveCamera::with_view(
             scene.fov,
             width as f32,
@@ -44,27 +51,27 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("Rendering:");
-    let thread_count = 4;
+
     let segment_height = height / thread_count;
     let mut img_threads = Vec::with_capacity(thread_count);
+
     // Spawn the threads to render in
-    for (i, y_bounds)
+    for (i, y_range)
         in (0..thread_count)
             .map(|x| {
                 // Iterate the coordinates in image segments
-                let segment_height = height / thread_count;
                 let start = x * segment_height;
                 let mut end = start + segment_height;
                 // The last created thread takes the remaining rows as well
                 if x == thread_count - 1 {
                     end += height % thread_count;
                 }
-                (start, end)
+                start..end
             })
             .enumerate()
     {
-        let arc_camera = std::sync::Arc::clone(&camera);
-        let arc_scene = std::sync::Arc::clone(&scene);
+        let arc_camera = sync::Arc::clone(&camera);
+        let arc_scene = sync::Arc::clone(&scene);
         img_threads.push(
             std::thread::spawn(move || {
                 // Every pixel in segment counts towards progress
@@ -72,42 +79,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tt::ProgressBar::new(width * segment_height, 25);
                 progress_bar.title(&format!("  Thread #{} progress", i + 1));
 
-                let mut img_vec = Vec::with_capacity(width * segment_height);
-                for iy in y_bounds.0..y_bounds.1 {
+                let mut img_vec = Vec::with_capacity(width * y_range.len());
+                for iy in y_range {
                     for ix in 0..width {
-                        let mut color = color::consts::BLACK;
-                        for _ in 0..AA_ITERATION_COUNT {
-                            // Anti-aliasing: n random samples per pixel
-                            let (rx, ry) = (
-                                rand::random::<f32>(),
-                                rand::random::<f32>(),
-                            );
-
-                            // Calculate image plane coordinates x,y so that
-                            // they're in [-1, 1]
-                            let x: f32 =
-                                (ix as f32 + rx) / width as f32 * 2.0 - 1.0;
-                            // y is negated to transform from raster-space (ie.
-                            // origin top left) into screen-space (origin
-                            // bottom left)
-                            let y: f32 =
-                                -((iy as f32 + ry) / height as f32 * 2.0 - 1.0);
-
-                            let ray = arc_camera.shoot_at(x, y);
-
-                            // Shade the pixel with RGB color; 6
-                            // traces/reflections are made for each
-                            // intersection
-                            color += &arc_scene.trace(&ray, 6);
-                        }
                         img_vec.push(
-                            Rgb::<u8>::from(
-                                // Take color's average for anti-aliasing
-                                color * (1.0 / AA_ITERATION_COUNT as f32)
+                            shade_pixel(
+                                ix, iy,
+                                width, height,
+                                &arc_camera, &arc_scene
                             )
                         );
-
-                        let _ = progress_bar.print_update_row(i + 1).unwrap();
+                        let _ = progress_bar.print_update_row(i + 1);
                     }
                 }
                 // Return the rendered pixels in segment
@@ -166,4 +148,39 @@ fn load_scene(filepath: &str) -> Result<Scene, Box<dyn std::error::Error>> {
 
     Scene::try_from(&mut json)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+}
+
+fn shade_pixel(
+    ix: usize,
+    iy: usize,
+    width: usize,
+    height: usize,
+    camera: &sync::Arc<PerspectiveCamera>,
+    scene: &sync::Arc<Scene>,
+) -> Rgb<u8> {
+    let mut color = color::consts::BLACK;
+
+    // Anti-aliasing: sample each pixel in some pattern and return average
+    // TODO Separate AA into a general function; AA works on a pixel:
+    // 1) get location and size of a pixel (input: rectangle)
+    // 2) shoot rays into these bounds (output: coordinates)
+    for _ in 0..AA_ITERATION_COUNT {
+        let (tx, ty) = (
+            rand::random::<f32>(),
+            rand::random::<f32>(),
+        );
+        // Calculate image plane coordinates x,y so that they're in [-1, 1]
+        let x: f32 = (ix as f32 + tx) / width as f32 * 2.0 - 1.0;
+        // y is negated to transform from raster-space (ie. origin top left)
+        // into screen-space (origin bottom left)
+        let y: f32 = -((iy as f32 + ty) / height as f32 * 2.0 - 1.0);
+
+        let ray = camera.shoot_at(x, y);
+
+        // Shade the pixel with RGB color; 6 traces/reflections are made for
+        // each intersection
+        color += &scene.trace(&ray, 6);
+    }
+
+    Rgb::<u8>::from(color * (1.0 / AA_ITERATION_COUNT as f32))
 }
