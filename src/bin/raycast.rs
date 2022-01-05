@@ -48,7 +48,21 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let segment_height = height / thread_count;
     let mut img_threads = Vec::with_capacity(thread_count);
     // Spawn the threads to render in
-    for i in 0..thread_count {
+    for (i, y_bounds)
+        in (0..thread_count)
+            .map(|x| {
+                // Iterate the coordinates in image segments
+                let segment_height = height / thread_count;
+                let start = x * segment_height;
+                let mut end = start + segment_height;
+                // The last created thread takes the remaining rows as well
+                if x == thread_count - 1 {
+                    end += height % thread_count;
+                }
+                (start, end)
+            })
+            .enumerate()
+    {
         let arc_camera = std::sync::Arc::clone(&camera);
         let arc_scene = std::sync::Arc::clone(&scene);
         img_threads.push(
@@ -59,15 +73,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 progress_bar.title(&format!("  Thread #{} progress", i + 1));
 
                 let mut img_vec = Vec::with_capacity(width * segment_height);
-                // Iterate the coordinates in image segment
-                let start_coord = i * segment_height;
-                for iy in start_coord..start_coord + segment_height {
+                for iy in y_bounds.0..y_bounds.1 {
                     for ix in 0..width {
                         let mut color = color::consts::BLACK;
                         for _ in 0..AA_ITERATION_COUNT {
                             // Anti-aliasing: n random samples per pixel
-                            let (rx, ry) =
-                                (rand::random::<f32>(), rand::random::<f32>());
+                            let (rx, ry) = (
+                                rand::random::<f32>(),
+                                rand::random::<f32>(),
+                            );
 
                             // Calculate image plane coordinates x,y so that
                             // they're in [-1, 1]
