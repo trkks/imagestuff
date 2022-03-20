@@ -56,28 +56,29 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut img_threads = Vec::with_capacity(thread_count);
 
     // Spawn the threads to render in
-    for (i, y_range)
-        in (0..thread_count)
-            .map(|x| {
-                // Iterate the coordinates in image segments
-                let start = x * segment_height;
-                let mut end = start + segment_height;
-                // The last created thread takes the remaining rows as well
-                if x == thread_count - 1 {
-                    end += height % thread_count;
-                }
-                start..end
-            })
+    for (i, mut progress_bar)
+        in tt::ProgressBar::multiple(width * height, 25, thread_count)
+            .into_iter()
             .enumerate()
     {
         let arc_camera = sync::Arc::clone(&camera);
         let arc_scene = sync::Arc::clone(&scene);
+
         img_threads.push(
             std::thread::spawn(move || {
                 // Every pixel in segment counts towards progress
-                let mut progress_bar =
-                    tt::ProgressBar::new(width * segment_height, 25);
                 progress_bar.title(&format!("  Thread #{} progress", i + 1));
+
+                let y_range = {
+                    // Iterate the coordinates in image segments
+                    let start = i * segment_height;
+                    let mut end = start + segment_height;
+                    // The last created thread takes the remaining rows as well
+                    if i == thread_count - 1 {
+                        end += height % thread_count;
+                    }
+                    start..end
+                };
 
                 let mut img_vec = Vec::with_capacity(width * y_range.len());
                 for iy in y_range {
@@ -89,7 +90,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 &arc_camera, &arc_scene
                             )
                         );
-                        let _ = progress_bar.print_update_row(i + 1);
+                        progress_bar.lap()
+                            .expect("Progress bar print failure");
                     }
                 }
                 // Return the rendered pixels in segment
@@ -104,6 +106,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     for t in img_threads {
         img_combined.append(&mut t.join().unwrap());
     }
+
+    // Move command line cursor to bottom of progress bars
+    print!("\x1b[{}B", thread_count);
+
     // Use `from_fn` instead of `from_vec` in order to not manually handle
     // unwrapping the Subpixel -associated-type
     let image = RgbImage::from_fn(
@@ -118,7 +124,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Saving could fail for example if a previous file is open; ask to retry
     while let Err(e)
-        = terminal_toys::start_spinner(|| image.save(&result_file))
+        = terminal_toys::spinner::start_spinner(|| image.save(&result_file))
     {
         println!("There was an error saving the render: {}", e);
         let mut stdout = io::stdout();
