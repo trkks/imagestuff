@@ -5,83 +5,170 @@ use std::convert::{TryFrom};
 use std::io::{self, Read, Write};
 use std::fs::{File};
 use std::sync;
+use std::path;
+use std::error;
 
 use image::{RgbImage, Rgb};
 use serde_json;
 
 use terminal_toys as tt;
+use tt::smargs;
 
 
 const AA_ITERATION_COUNT: usize = 25;
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let output_dir = "renders";
-    utils::confirm_dir(output_dir)?;
 
-    let mut args = std::env::args();
-    // Skip executable name
-    args.next();
-    // Load view from file
-    let filepath = args.next()
-        .ok_or(format!("A source file for the scene is needed"))?;
+type ResultError = Box<dyn error::Error>;
 
-    let scene = sync::Arc::new(
-        load_scene(&filepath)
-            .map_err(|e| format!("Loading scene failed - {}", e))?
-    );
-
+struct RaycastArgs {
     // Image bounds
-    let (width, height) = match (args.next(), args.next()) {
-        (Some(a), None)    => (a.parse().unwrap(), a.parse().unwrap()),
-        (Some(a), Some(b)) => (a.parse().unwrap(), b.parse().unwrap()),
-        _                  => (128, 128),
-    };
+    width: usize,
+    height: usize,
+    thread_count: usize,
+    // This field is here just for defining all the needed arguments.
+    #[allow(dead_code)]
+    source_path: path::PathBuf,
+    output_path: path::PathBuf,
+    scene: Scene,
+    camera: PerspectiveCamera,
+}
+impl TryFrom<tt::Smargs> for RaycastArgs {
+    type Error = ResultError;
+    fn try_from(smargs: tt::Smargs) -> Result<Self, Self::Error> {
+        // TODO Return --help if errors
 
-    let thread_count = match args.next() {
-        Some(a) => a.parse().unwrap(),
-        None    => 4,
-    };
+        // Get all the possible program arguments.
+        let source_path  = smargs.gets(&["source",  "s"]);
+        let width        = smargs.gets(&["width",   "w"]);
+        let height       = smargs.gets(&["height",  "h"]);
+        let output_path  = smargs.gets(&["out",     "o"]);
+        let thread_count = smargs.gets(&["threads", "t"]);
 
-    let camera = sync::Arc::new(
-        PerspectiveCamera::with_view(
+        // Secondary check if source path was given as first argument.
+        let source_path: path::PathBuf = source_path.or(smargs.first())
+            .ok()
+            .or_else(|| {
+                // TODO a custom error-type here (or refine smargs)?
+                eprintln!("Need scene's source file as first argument");
+                std::process::exit(1);
+            }).unwrap();
+
+        // 3:4 aspect ratio
+        let (width, height) = (
+            width.or_else(|e| if e.is_not_found() { Ok(128) } else { Err(e) })?,
+            height.or_else(|e| if e.is_not_found() { Ok(96) } else { Err(e) })?,
+        );
+
+        let output_dir = "renders";
+        utils::confirm_dir(output_dir)?;
+        let output_path = if output_path.is_err() {
+            let filename = utils::filename(&source_path).or_else(|| {
+                // TODO a custom error-type here?
+                eprintln!(
+                    "Failed to extract filename from '{}'",
+                    source_path.to_str().unwrap()
+                );
+                std::process::exit(1);
+            }).unwrap();
+            // TODO Relative paths
+            // TODO Allow specifying just the output dir instead of full
+            // filepath (filename still with the same old format!)
+            let out = format!(
+                "./{}/{}_{}x{}.png", output_dir, filename, width, height
+            );
+            eprintln!(
+                "Option '--out' not found. Automatically setting to '{}'", out
+            );
+            path::PathBuf::from(out)
+        } else {
+            // TODO Confirm, that the image format can be determined by image.
+            output_path?
+        };
+
+        let thread_count = thread_count.or_else(|e|
+            if let smargs::SmargError::Key { .. } = e {
+                Ok(4)
+            } else {
+                Err(e)
+            }
+        )?;
+
+        // Load view from file
+        let scene = load_scene(&source_path)
+            .map_err(|e| format!("Loading scene failed - {}", e))?;
+
+        let camera = PerspectiveCamera::with_view(
             scene.fov,
             width as f32,
             height as f32
-        )
-    );
+        );
 
-    println!("Rendering:");
+        Ok(Self{
+            width,
+            height,
+            thread_count,
+            source_path,
+            output_path,
+            scene,
+            camera,
+        })
+    }
+}
+
+pub fn main() -> Result<(), ResultError> {
+    let RaycastArgs {
+        width,
+        height,
+        thread_count,
+        source_path: _,
+        output_path,
+        scene,
+        camera,
+    } = RaycastArgs::try_from(tt::Smargs::from_env()?)?;
+
+    let output_path = output_path.to_str().unwrap();
 
     let segment_height = height / thread_count;
     let mut img_threads = Vec::with_capacity(thread_count);
 
+    println!("Rendering:");
+
+    let camera = sync::Arc::new(camera);
+    let scene = sync::Arc::new(scene);
+
     // Spawn the threads to render in
     for (i, mut progress_bar)
-        in tt::ProgressBar::multiple(width * height, 25, thread_count)
+        in tt::ProgressBar::multiple(
+                width * height,
+                25,
+                thread_count
+            )
             .into_iter()
             .enumerate()
     {
         let arc_camera = sync::Arc::clone(&camera);
         let arc_scene = sync::Arc::clone(&scene);
 
+        // Every pixel in segment counts towards progress
+        progress_bar.title(&format!("  Thread #{} progress", i + 1));
+
+        let y_range = {
+            // Iterate the coordinates in image segments
+            let start = i * segment_height;
+            let mut end = start + segment_height;
+            // The last created thread takes the remaining rows as well
+            if i == thread_count - 1 {
+                end += height % thread_count;
+            }
+            start..end
+        };
+
+        let mut img_vec =
+            Vec::with_capacity(width * y_range.len());
+
         img_threads.push(
             std::thread::spawn(move || {
-                // Every pixel in segment counts towards progress
-                progress_bar.title(&format!("  Thread #{} progress", i + 1));
-
-                let y_range = {
-                    // Iterate the coordinates in image segments
-                    let start = i * segment_height;
-                    let mut end = start + segment_height;
-                    // The last created thread takes the remaining rows as well
-                    if i == thread_count - 1 {
-                        end += height % thread_count;
-                    }
-                    start..end
-                };
-
-                let mut img_vec = Vec::with_capacity(width * y_range.len());
-                for iy in y_range {
+               for iy in y_range {
                     for ix in 0..width {
                         img_vec.push(
                             shade_pixel(
@@ -118,13 +205,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Write to image file
-    let result_file = format!("./{}/{}_{}x{}.png",
-        output_dir, utils::filename(&filepath)?, width, height);
-    print!("\nSaving to {} ", result_file);
+    print!("\nSaving to {} ", output_path);
 
     // Saving could fail for example if a previous file is open; ask to retry
     while let Err(e)
-        = terminal_toys::spinner::start_spinner(|| image.save(&result_file))
+        = terminal_toys::spinner::start_spinner(
+            || image.save(&output_path)
+        )
     {
         println!("There was an error saving the render: {}", e);
         let mut stdout = io::stdout();
@@ -143,7 +230,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn load_scene(filepath: &str) -> Result<Scene, Box<dyn std::error::Error>> {
+fn load_scene(filepath: &path::PathBuf) -> Result<Scene, ResultError> {
     let mut file = File::open(filepath)?;
 
     let mut contents = String::from("");

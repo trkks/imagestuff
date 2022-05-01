@@ -37,13 +37,11 @@ pub fn confirm_dir(dirname: &str) -> Result<(), String> {
 }
 
 // Remove file extension and directory path from input string
-pub fn filename(file: &str) -> Result<&str,String> {
-    if let Some(name) = std::path::Path::new(file).file_stem() {
-        if let Some(s) = name.to_str() {
-            return Ok(s)
-        }
-    }
-    Err(format!("Bad filename: {}",file))
+pub fn filename<'a, T>(file: &'a T) -> Option<&'a str>
+where
+    T: std::convert::AsRef<std::ffi::OsStr>,
+{
+    std::path::Path::new(file).file_stem().and_then(|name| name.to_str())
 }
 
 pub fn degs_to_rads(degs: f32) -> f32 {
