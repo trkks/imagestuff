@@ -80,16 +80,20 @@ fn ascii_image(
         if i % w as usize == 0 && i != 0 {
             ascii.push('\n');
         }
-        let asciipixel = pixel_to_ascii(pixel, inverted); 
+        let asciipixel = pixel_to_ascii(pixel, inverted);
         // Push twice so that textfile looks more like an image in an editor
         ascii.push(asciipixel);
         ascii.push(asciipixel);
 
         progress.title(&format!("{}/{}", i+1, n));
-        progress.print_update().map_err(|e| e.to_string())?; 
-    } 
+        progress.lap().map_err(|e| e.to_string())?;
+    }
 
-    let newfile = format!("./ascii/{}.txt", utils::filename(srcfile)?);
+    let newfile = format!(
+        "./ascii/{}.txt",
+        utils::filename(&srcfile)
+            .expect(&format!("No filename: {}", srcfile))
+    );
     println!("\nSaving to {}", newfile);
 
     let mut file = File::create(newfile).map_err(|e| e.to_string())?;

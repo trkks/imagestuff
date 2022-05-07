@@ -36,7 +36,7 @@ pub fn confirm_dir(dirname: &str) -> Result<(), String> {
     Ok(())
 }
 
-// Remove file extension and directory path from input string
+/// Remove file extension and directory path from input string.
 pub fn filename<'a, T>(file: &'a T) -> Option<&'a str>
 where
     T: std::convert::AsRef<std::ffi::OsStr>,

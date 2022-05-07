@@ -77,23 +77,28 @@ fn lerp_images(img1: &ImageData, img2: &ImageData) -> Result<(), String>  {
     // Lerp between corresponding pixels in the two images and save to a third
     let mut new_pixels :Vec<u16> = Vec::new();
     new_pixels.reserve((w * h * 3) as usize); // cast to usize
-    
+
     // Configure a progress bar
     let mut progress = ProgressBar::new((w * h) as usize, 16);
 
     for (i, (&p1, &p2)) in img1.pixels().zip(img2.pixels()).enumerate() {
         // Add new pixel lerped between two in image
         let [r,g,b] = half_lerp(p1, p2);
-        new_pixels.push(r); new_pixels.push(g); new_pixels.push(b); 
+        new_pixels.push(r); new_pixels.push(g); new_pixels.push(b);
 
         // Display the progress bar
         progress.title(&format!("Lerpstatus ({}/{})", i+1, w*h));
-        progress.print_update().map_err(|e| e.to_string())?; 
+        progress.lap().map_err(|e| e.to_string())?;
     }
 
     utils::confirm_dir("pics")?;
-    let newfile = format!("./pics/lerp_{}_{}.png",
-                          utils::filename(file1)?, utils::filename(file2)?);
+    let newfile = format!(
+        "./pics/lerp_{}_{}.png",
+        utils::filename(file1)
+            .expect(&format!("No filename: {}", file1)),
+        utils::filename(file2)
+            .expect(&format!("No filename: {}", file2)),
+    );
     println!("\nSaving to {}", &newfile);
 
     // Save transformed image as a new file
