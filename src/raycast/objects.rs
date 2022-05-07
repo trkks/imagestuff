@@ -26,7 +26,12 @@ impl Object3D {
     ) -> Self {
         Self {
             // Inverse transform here in advance, because always used so
-            transform: transform.map(|t| t.inversed()),
+            transform: transform.map(|t| 
+                t.inversed()
+                    .expect(
+                        &format!("The matrix does not have an inverse: {}", t)
+                    )
+            ),
             object,
             material: material.unwrap_or_default(),
         }
