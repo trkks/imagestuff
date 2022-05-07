@@ -1,4 +1,7 @@
+use std::path;
 use std::io::Write;
+
+use terminal_toys::spinner::start_spinner;
 
 use image::io::{Reader as ImageReader};
 use image::DynamicImage;
@@ -7,13 +10,14 @@ use image::DynamicImage;
 /// Utility for loading an image from filepath into a DynamicImage
 pub fn open_decode<P>(path: P) -> Result<DynamicImage, String>
 where
-    P: AsRef<std::path::Path> + std::fmt::Debug,
+    P: AsRef<path::Path>,
 {
-    println!("Loading image {:?}", path);
-    ImageReader::open(path)
+    print!("Loading image {} ", path.as_ref().to_str().unwrap());
+    start_spinner(|| ImageReader::open(path)
         .map_err(|e| e.to_string())?
         .decode()
         .map_err(|e| e.to_string())
+    )
 }
 
 /// If dirname directory does not exists under current directory, prompt to
@@ -21,7 +25,7 @@ where
 pub fn confirm_dir(dirname: &str) -> Result<(), String> {
     let dir = dirname;
 
-    if !std::path::Path::new(&dir).exists() {
+    if !path::Path::new(&dir).exists() {
         print!("Directory `{}` not found. Create it [y/N]? ", dir);
         std::io::stdout().flush().map_err(|e| e.to_string())?;
         let mut answer = String::new();
@@ -39,9 +43,9 @@ pub fn confirm_dir(dirname: &str) -> Result<(), String> {
 /// Remove file extension and directory path from input string.
 pub fn filename<'a, T>(file: &'a T) -> Option<&'a str>
 where
-    T: std::convert::AsRef<std::ffi::OsStr>,
+    T: AsRef<path::Path>,
 {
-    std::path::Path::new(file).file_stem().and_then(|name| name.to_str())
+    file.as_ref().file_stem().and_then(|name| name.to_str())
 }
 
 pub fn degs_to_rads(degs: f32) -> f32 {
