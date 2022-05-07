@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -67,7 +67,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         height,
         inverted,
         palette,
-    } = AsciiConfig::try_from(Smargs::from_env()?)?;
+    } = Smargs::from_env()?.try_into()?;
 
     ascii_image(&source, width, height, inverted, &palette)
 }
