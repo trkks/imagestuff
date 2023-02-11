@@ -87,31 +87,16 @@ impl TryFrom<&str> for SquareMatrix4 {
     }
 }
 
-#[derive(serde::Deserialize, Copy, Clone, Debug)]
+#[derive(serde::Deserialize, Clone, Copy, Debug)]
 pub struct Material {
     pub color: color::Color,
     pub shininess: i32,
-    //pub surface: Box<dyn Fn(Intersection) -> UnitVector3>,
-}
-impl Material {
-    /// Calculate in which direction the ray that hit intersection will
-    /// continue. TODO Somehow make it possible to select this from
-    /// scene-description... predefined "diffuse", "metal", "glass" etc?
-    pub fn surface(&self, intr: &Intersection) -> UnitVector3 {
-        // Based on
-        // https://raytracing.github.io/books/RayTracingInOneWeekend.html#diffusematerials/truelambertianreflection
-        let random_sphere_point = Vector3 {
-            x: random::<f32>() - 0.5,
-            y: random::<f32>() - 0.5,
-            z: random::<f32>() - 0.5
-        }.normalized();
-        ((intr.point + intr.normal.into() + random_sphere_point.into()) - intr.point).normalized()
-    }
+    pub surface: Surface,
 }
 
 impl std::default::Default for Material {
     fn default() -> Self {
-        Material { color: color::consts::GREY, shininess: 0 }
+        Material { color: color::consts::GREY, shininess: 0, surface: Surface::Normal }
     }
 }
 
@@ -152,10 +137,10 @@ pub mod color {
         fn from(c: Color) -> Self {
             // Taking the square root applies "gamma 2"
             Rgb([
-                (c.0.x.clamp(0.0, 1.0).sqrt() * u8::MAX as f32) as u8,
-                (c.0.y.clamp(0.0, 1.0).sqrt() * u8::MAX as f32) as u8,
-                (c.0.z.clamp(0.0, 1.0).sqrt() * u8::MAX as f32) as u8,
-            ])
+                (c.0.x.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
+                (c.0.y.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
+                (c.0.z.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
+            ])                                                   
         }
     }
 
@@ -199,3 +184,38 @@ pub mod color {
     }
 }
 
+/// Select behavior of ray after it hits a surface.
+#[derive(serde::Deserialize, Clone, Copy, Debug)]
+pub enum Surface {
+    Normal,
+    Diffuse,
+    PerfectReflection,
+}
+
+impl Surface {
+    pub fn surface(&self, intersection: &Intersection) -> UnitVector3 {
+        match self {
+            Surface::Normal => intersection.normal,
+            Surface::Diffuse => diffuse(intersection),
+            Surface::PerfectReflection => intersection.incoming.reflect(&intersection.normal),
+        }
+    }
+}
+
+fn diffuse(intersection: &Intersection) -> UnitVector3 {
+    // Based on
+    // https://raytracing.github.io/books/RayTracingInOneWeekend.html#diffusematerials/truelambertianreflection
+    let random_sphere_point = Vector3 {
+        x: random::<f32>() - 0.5,
+        y: random::<f32>() - 0.5,
+        z: random::<f32>() - 0.5
+    }.normalized();
+
+    (
+        (
+            intersection.point
+            + 0.5 * <UnitVector3 as Into<Vector3>>::into(intersection.normal)
+            + random_sphere_point.into()
+        ) - intersection.point
+    ).normalized()
+}
