@@ -4,6 +4,7 @@ pub struct Vector3 {
     pub y: f32,
     pub z: f32,
 }
+
 impl Vector3 {
     pub fn normalized(self) -> UnitVector3 {
         UnitVector3::from(self)
@@ -22,6 +23,7 @@ impl Vector3 {
         }
     }
 }
+
 impl std::ops::Mul<f32> for Vector3 {
     type Output = Self;
     fn mul(self, c: f32) -> Self::Output {
@@ -32,12 +34,14 @@ impl std::ops::Mul<f32> for Vector3 {
         }
     }
 }
+
 impl std::ops::Mul<Vector3> for f32 {
     type Output = Vector3;
     fn mul(self, v: Vector3) -> Self::Output {
         v * self
     }
 }
+
 impl std::ops::Add<Vector3> for Vector3 {
     type Output = Vector3;
     fn add(self, other: Self) -> Self::Output {
@@ -48,6 +52,7 @@ impl std::ops::Add<Vector3> for Vector3 {
         }
     }
 }
+
 impl std::ops::Sub<Vector3> for Vector3 {
     type Output = Self;
     fn sub(self, other: Self) -> Self::Output {
@@ -58,6 +63,7 @@ impl std::ops::Sub<Vector3> for Vector3 {
         }
     }
 }
+
 impl std::ops::Neg for Vector3 {
     type Output = Self;
     fn neg(self) -> Self::Output {
@@ -68,13 +74,9 @@ impl std::ops::Neg for Vector3 {
         }
     }
 }
+
 impl From<UnitVector3> for Vector3 {
     fn from(u: UnitVector3) -> Self {
-        u.0
-    }
-}
-impl From<&UnitVector3> for Vector3 {
-    fn from(u: &UnitVector3) -> Self {
         u.0
     }
 }
@@ -82,6 +84,7 @@ impl From<&UnitVector3> for Vector3 {
 /// A 3D vector that is always normalized
 #[derive(Copy,Clone,Debug)]
 pub struct UnitVector3(Vector3);
+
 impl UnitVector3 {
     pub fn reflect(&self, n: &Self) -> UnitVector3 {
         let v = self.0 - 2.0 * self.0.dot(&n.0) * n.0;
@@ -110,30 +113,21 @@ impl std::ops::Neg for UnitVector3 {
         UnitVector3(-self.0)
     }
 }
+
 impl std::ops::Mul<f32> for UnitVector3 {
     type Output = Vector3;
     fn mul(self, c: f32) -> Self::Output {
         self.0 * c
     }
 }
+
 impl std::ops::Mul<UnitVector3> for f32 {
     type Output = Vector3;
     fn mul(self, v: UnitVector3) -> Self::Output {
         v.0 * self
     }
 }
-impl std::ops::Mul<f32> for &UnitVector3 {
-    type Output = Vector3;
-    fn mul(self, c: f32) -> Self::Output {
-        self.0 * c
-    }
-}
-impl std::ops::Mul<&UnitVector3> for f32 {
-    type Output = Vector3;
-    fn mul(self, v: &UnitVector3) -> Self::Output {
-        v.0 * self
-    }
-}
+
 impl From<Vector3> for UnitVector3 {
     fn from(v: Vector3) -> Self {
         let length = v.length();
