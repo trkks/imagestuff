@@ -1,3 +1,6 @@
+use std::convert::TryFrom;
+
+
 #[derive(serde::Deserialize, Copy,Clone,Debug)]
 pub struct Vector3 {
     pub x: f32,
@@ -7,7 +10,10 @@ pub struct Vector3 {
 
 impl Vector3 {
     pub fn normalized(self) -> UnitVector3 {
-        UnitVector3::from(self)
+        // TODO The caller probably wants to handle the error instead of
+        // panicking.
+        UnitVector3::try_from(self)
+            .expect("attempt to normalize approximately zero-length vector")
     }
     pub fn length(&self) -> f32 {
         (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
@@ -86,15 +92,19 @@ impl From<UnitVector3> for Vector3 {
 pub struct UnitVector3(Vector3);
 
 impl UnitVector3 {
-    pub fn reflect(&self, n: &Self) -> UnitVector3 {
+    pub fn x(&self) -> f32 { self.0.x }
+    pub fn y(&self) -> f32 { self.0.y }
+    pub fn z(&self) -> f32 { self.0.z }
+
+    pub fn reflect(&self, n: &Self) -> Self {
         let v = self.0 - 2.0 * self.0.dot(&n.0) * n.0;
-        UnitVector3::from(v)
+        v.normalized()
     }
     pub fn dot(&self, other: &Self) -> f32 {
         self.0.dot(&other.0)
     }
     pub fn cross(&self, other: &Self) -> Self {
-        UnitVector3::from(self.0.cross(&other.0))
+        self.0.cross(&other.0).normalized()
     }
 }
 
@@ -128,16 +138,21 @@ impl std::ops::Mul<UnitVector3> for f32 {
     }
 }
 
-impl From<Vector3> for UnitVector3 {
-    fn from(v: Vector3) -> Self {
+impl TryFrom<Vector3> for UnitVector3 {
+    type Error = f32;
+    /// Make sure that the input vector is not (approximately) zero in length
+    /// (which could eventually result in funkyness with the "unit"-vector??).
+    fn try_from(v: Vector3) -> Result<Self, f32> {
         let length = v.length();
-        Self(
-            Vector3 {
+        if -f32::EPSILON <= length && length <= f32::EPSILON {
+            Err(length)
+        } else {
+            Ok(Self(Vector3 {
                 x: v.x / length,
                 y: v.y / length,
                 z: v.z / length
-            }
-        )
+            }))
+        }
     }
 }
 
