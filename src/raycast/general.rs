@@ -1,5 +1,7 @@
 use std::convert::TryFrom;
 
+use rand::random;
+
 use crate::utils;
 use crate::raycast::{
     ray::Ray,
@@ -89,7 +91,24 @@ impl TryFrom<&str> for SquareMatrix4 {
 pub struct Material {
     pub color: color::Color,
     pub shininess: i32,
+    //pub surface: Box<dyn Fn(Intersection) -> UnitVector3>,
 }
+impl Material {
+    /// Calculate in which direction the ray that hit intersection will
+    /// continue. TODO Somehow make it possible to select this from
+    /// scene-description... predefined "diffuse", "metal", "glass" etc?
+    pub fn surface(&self, intr: &Intersection) -> UnitVector3 {
+        // Based on
+        // https://raytracing.github.io/books/RayTracingInOneWeekend.html#diffusematerials/truelambertianreflection
+        let random_sphere_point = Vector3 {
+            x: random::<f32>() - 0.5,
+            y: random::<f32>() - 0.5,
+            z: random::<f32>() - 0.5
+        }.normalized();
+        ((intr.point + intr.normal.into() + random_sphere_point.into()) - intr.point).normalized()
+    }
+}
+
 impl std::default::Default for Material {
     fn default() -> Self {
         Material { color: color::consts::GREY, shininess: 0 }
@@ -159,6 +178,12 @@ pub mod color {
         type Output = Self;
         fn mul(self, c: f32) -> Self::Output {
             Color(Vector3::mul(self.0, c))
+        }
+    }
+    impl std::ops::Mul<Color> for f32 {
+        type Output = Color;
+        fn mul(self, c: Color) -> Self::Output {
+            Color(Vector3::mul(c.0, self))
         }
     }
     impl std::ops::Add for Color {
