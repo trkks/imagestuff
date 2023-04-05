@@ -1,75 +1,100 @@
-use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
 use image::{Rgb, Pixel};
 
-use terminal_toys::{ProgressBar, Smargs};
+use terminal_toys::{smargs, Smargs, SmargsResult, SmargKind as Sk, ProgressBar};
 
 use imagestuff::utils;
 
 
-const DEFAULT_PALETTE: [char; 8] = [' ', '-', '~', '=', 'o', '0', '@', '#'];
+const DEFAULT_PALETTE: &str = " -~=o0@#";
 
 
-pub struct AsciiConfig {
-    source: PathBuf,
-    width: u32,
-    height: u32,
-    inverted: bool,
-    palette: Vec<char>,
-}
-
-impl TryFrom<Smargs> for AsciiConfig {
-    type Error = Box<dyn std::error::Error>;
-
-    fn try_from(smargs: Smargs) -> Result<Self, Self::Error> {
-        let source   = smargs.gets(&["source",   "s"]);
-        let width    = smargs.gets(&["width",    "w"]);
-        let height   = smargs.gets(&["height",   "h"]);
-        let inverted = smargs.gets::<bool>(&["inverted", "i"]);
-        let palette  = smargs.gets::<String>(&["palette",  "p"]);
-
-        let source = source.or(smargs.first())
-            .ok()
-            .or_else(|| {
-                eprintln!("Need a source image file as first argument");
-                std::process::exit(1);
-            }).unwrap();
-
-        // The width and height are optional.
-        let width = width.or_else(
-            |e| if e.is_not_found() { Ok(50) } else { Err(e) }
-        )?;
-        let height = height.or_else(
-            |e| if e.is_not_found() { Ok(50) } else { Err(e) }
-        )?;
-
-        // TODO Could this be handled by Smargs::gets automatically (condition
-        // on type: if T == bool { .. } else { .. } )?
-        let inverted = inverted.is_ok();
-
-        let palette = if let Ok(s) = palette {
-            s.chars().collect::<Vec<char>>()
-        } else {
-            DEFAULT_PALETTE.to_vec()
-        };
-
-        Ok(AsciiConfig { source, width, height, inverted, palette })
-    }
-}
-
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() {
     let AsciiConfig {
         source,
         width,
         height,
         inverted,
         palette,
-    } = Smargs::from_env()?.try_into()?;
+    } = match get_config() {
+        // Hmmm...
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
 
-    ascii_image(&source, width, height, inverted, &palette)
+    let palette = match palette.0
+        .map(|x| x.chars().collect::<Vec<_>>())
+        .map_err(|e| e.to_string())
+    {
+        // ... It's almost like ...
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    match ascii_image(&source, width, height, inverted, &palette)
+        .map_err(|e| e.to_string())
+    {
+        // ... Shouldn't there be a simple operator-like way to reduce all this
+        // boilerplate?
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+}
+pub struct AsciiConfig {
+    source: PathBuf,
+    width: u32,
+    height: u32,
+    inverted: bool,
+    palette: SmargsResult<String>,
+}
+
+fn get_config() -> Result<AsciiConfig, String> {
+    smargs!(
+        "Convert a picture into 'ASCII' (UTF8)",
+        AsciiConfig {
+            source:(
+                "Path to picture to convert",
+                ["source", "s"],
+                Sk::Required
+            ),
+            width:(
+                "Amount of columns in result (this is doubled for better \
+                terminal visuals so give half if you want exact width)",
+                ["width", "w"],
+                Sk::Optional("50"),
+            ),
+            height:(
+                "Amount of rows in result",
+                ["height", "h"],
+                Sk::Optional("50")
+            ),
+            inverted:(
+                "Output 'black on white' for light-colored terminal",
+                ["inverted", "i"],
+                Sk::Flag
+            ),
+            palette:(
+                "UTF8 character-set to use",
+                ["palette", "p"],
+                Sk::Optional(DEFAULT_PALETTE)
+            )
+        }
+    )
+    .help_keys(vec!["help"])
+    .from_env()
+    .map_err(|x| x.to_string())
 }
 
 // Using ascii characters, generate a textfile representation of an image
@@ -142,29 +167,31 @@ mod tests {
     #[test]
     fn test_pixel_to_ascii() {
         let n = u16::MAX;
+        let palette = DEFAULT_PALETTE.chars().collect::<Vec<char>>();
+
         assert_eq!(
-            pixel_to_ascii(Rgb([n, n, n]), false, &DEFAULT_PALETTE),
+            pixel_to_ascii(Rgb([n, n, n]), false, &palette),
             '#'
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), false, &DEFAULT_PALETTE),
+            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), false, &palette),
             '='
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([0, 0, 0]), false, &DEFAULT_PALETTE),
+            pixel_to_ascii(Rgb([0, 0, 0]), false, &palette),
             ' '
         );
 
         assert_eq!(
-            pixel_to_ascii(Rgb([n, n, n]), true, &DEFAULT_PALETTE),
+            pixel_to_ascii(Rgb([n, n, n]), true, &palette),
             ' '
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), true, &DEFAULT_PALETTE),
+            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), true, &palette),
             'o'
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([0, 0, 0]), true, &DEFAULT_PALETTE),
+            pixel_to_ascii(Rgb([0, 0, 0]), true, &palette),
             '#'
         );
     }
