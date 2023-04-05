@@ -31,13 +31,13 @@ fn piped_input() -> Option<Vec<path::PathBuf>> {
     // FIXME if nothing is piped, blocks forever
     while let Ok(n) = stdin.read_line(&mut input) {
         if n > 0 {
-            get_path(&input.trim(), &mut paths);
+            get_path(input.trim(), &mut paths);
             input.clear();
         } else {
             break;
         }
     }
-    return if paths.len() > 0 { Some(paths) } else { None };
+    if !paths.is_empty() { Some(paths) } else { None }
 }
 
 
@@ -48,17 +48,17 @@ fn cl_args() -> Option<Vec<path::PathBuf>> {
     args.next();
     // Get the target filepaths
     let mut paths = Vec::new();
-    while let Some(arg) = args.next() {
+    for arg in args {
         get_path(&arg, &mut paths);
     }
 
     // Load the images
     //let frames = paths.iter().map(utils::open_decode);
-    return if paths.len() > 0 { Some(paths) } else { None };
+    if !paths.is_empty() { Some(paths) } else { None }
 }
 
 fn get_path(x: &str, paths: &mut Vec<path::PathBuf>) {
-    if let Ok(path) = std::fs::canonicalize(&x) {
+    if let Ok(path) = std::fs::canonicalize(x) {
         paths.push(path);
     } else {
         eprintln!("Not a valid path input: '{}'", x);
@@ -88,8 +88,8 @@ fn process(paths: Vec<path::PathBuf>) {
     );
 
     // Combine the images
-    for i in 0..paths.len() {
-        let image = utils::open_decode(&paths[i]).unwrap();
+    for (i, path) in paths.iter().enumerate() {
+        let image = utils::open_decode(&path).unwrap();
         image::imageops::replace(&mut result, &image, i as u32 * max_width, 0);
     }
 

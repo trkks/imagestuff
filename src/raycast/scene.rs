@@ -26,7 +26,7 @@ impl Scene {
         let mut color = self.ambient_color;
         if n > 0 {
             // TODO is epsilon needed here?
-            if let Some(intr) = self.intersect(&ray, f32::EPSILON) {
+            if let Some(intr) = self.intersect(ray, f32::EPSILON) {
                 // Nudge off of the surface so that ray does not re-collide
                 // (see "shadow acne")
                 // NOTE The "bias" (ie. normal * epsilon) seems hard to get
@@ -90,7 +90,7 @@ impl Scene {
 
     pub fn color_debug(&self, ray: &Ray) -> Color {
         // TODO is epsilon needed here?
-        return if let Some(intr) = self.intersect(&ray, f32::EPSILON) {
+        if let Some(intr) = self.intersect(ray, f32::EPSILON) {
             // Color according to normal
             let Vector3 { x, y, z } = intr.normal.into();
             Color::new(x, y, z)
@@ -155,10 +155,8 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
                     )?
                     .as_ref()
                     .map(|s| s[..].try_into()
-                        .expect(
-                            format!("Bad transform string on the {} item in \
-                                    'objects'", i).as_str()
-                        )
+                        .unwrap_or_else(|_| panic!("Bad transform string on the {} item in \
+                                    'objects'", i))
                     );
 
                 // Either create the raw object or choose from named ones
@@ -167,18 +165,12 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
                     if json_value.is_string() {
                         // TODO Maybe reference count here instead of clone?
                         let key: String = from_value(json_value)?;
-                        named.get(&key).expect(
-                            format!("The name {} is not found in map \
-                                    'named'", key)
-                                    .as_str()
-                            )
+                        named.get(&key).unwrap_or_else(|| panic!("The name {} is not found in map \
+                                    'named'", key))
                             .clone()
                     } else {
-                        shapes_from_json(json_value).expect(
-                            format!("Failed with value corresponding to \
-                                    'object' on item {} in 'objects'", i)
-                                    .as_str()
-                        )
+                        shapes_from_json(json_value).unwrap_or_else(|_| panic!("Failed with value corresponding to \
+                                    'object' on item {} in 'objects'", i))
                     }
                 };
 
@@ -200,7 +192,7 @@ impl Intersect for Scene {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         //TODO intersect lights? (simulate a lens as glass sphere over camera)
         self.objects.iter()
-            .filter_map(|x| x.intersect(&ray, tmin))
+            .filter_map(|x| x.intersect(ray, tmin))
             .reduce(|acc, x| if x.t < acc.t { x } else { acc })
     }
 }

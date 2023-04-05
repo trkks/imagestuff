@@ -26,7 +26,7 @@ impl LerpConfig {
 }
 
 pub fn main() -> Result<(), String> {
-    let config = LerpConfig::new(env::args()).map_err(|e| e.to_string())?;
+    let config = LerpConfig::new(env::args())?;
 
     // TODO Lerp based on the size of first input ie. squeeze/stretch to fit
 
@@ -56,7 +56,7 @@ fn load_all(files: Vec<String>) -> Result<Vec<ImageData>, String> {
         match utils::open_decode(&f) {
             Ok(img) =>
                 imgs.push(ImageData { path: f, buffer: img.into_rgb16() }),
-            Err(e)    => return Err(e.to_string()),
+            Err(e)    => return Err(e),
         }
     }
     Ok(imgs)
@@ -68,7 +68,7 @@ fn lerp_images(img1: &ImageData, img2: &ImageData) -> Result<(), String>  {
     let ImageData { path: file2, buffer: img2 } = img2;
 
     if img1.dimensions() != img2.dimensions()  {
-        return Err(format!("The images are not the same size"));
+        return Err("The images are not the same size".to_string());
     }
 
     let w = img1.width();
@@ -95,9 +95,9 @@ fn lerp_images(img1: &ImageData, img2: &ImageData) -> Result<(), String>  {
     let newfile = format!(
         "./pics/lerp_{}_{}.png",
         utils::filename(file1)
-            .expect(&format!("No filename: {}", file1)),
+            .unwrap_or_else(|| panic!("No filename: {}", file1)),
         utils::filename(file2)
-            .expect(&format!("No filename: {}", file2)),
+            .unwrap_or_else(|| panic!("No filename: {}", file2)),
     );
     println!("\nSaving to {}", &newfile);
 
@@ -105,7 +105,7 @@ fn lerp_images(img1: &ImageData, img2: &ImageData) -> Result<(), String>  {
     ImgBuffer16::from_vec(w, h, new_pixels)
         .unwrap() // NOTE I'm guessing `from_vec` rarely panics
         .save(&newfile)
-        .expect(format!("Failed at saving file to: '{}'", newfile).as_str());
+        .unwrap_or_else(|_| panic!("Failed at saving file to: '{}'", newfile));
 
     Ok(())
 }

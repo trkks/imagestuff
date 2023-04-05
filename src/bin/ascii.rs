@@ -108,7 +108,7 @@ fn ascii_image(
     utils::confirm_dir("ascii")?;
 
     // First open imagefile, confirming its validity
-    let img = utils::open_decode(&srcfile).map_err(|e| e.to_string())?;
+    let img = utils::open_decode(srcfile)?;
     // Then turn the image into a processable format for the ascii conversion
     let img = img.resize(w, h, image::imageops::FilterType::Triangle)
                  .grayscale()

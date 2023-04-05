@@ -8,7 +8,7 @@ use std::path::{self, PathBuf};
 use std::error;
 
 use image::{RgbImage, Rgb};
-use serde_json;
+
 
 use terminal_toys as tt;
 
@@ -219,7 +219,7 @@ pub fn main() -> Result<(), ResultError> {
         let _ = stdout.flush();
         let mut buffer = String::new();
         let _ = io::stdin().read_line(&mut buffer);
-        if buffer.starts_with("n") {
+        if buffer.starts_with('n') {
             println!("Discarding the render and exiting with error");
             // Apparently the compiler cannot infer without forcing with `as`
             // and just calling `Box::<dyn std::error::Error>::new` isn't

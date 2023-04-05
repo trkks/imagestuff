@@ -144,7 +144,7 @@ impl TryFrom<Vector3> for UnitVector3 {
     /// (which could eventually result in funkyness with the "unit"-vector??).
     fn try_from(v: Vector3) -> Result<Self, f32> {
         let length = v.length();
-        if -f32::EPSILON <= length && length <= f32::EPSILON {
+        if (-f32::EPSILON..=f32::EPSILON).contains(&length) {
             Err(length)
         } else {
             Ok(Self(Vector3 {

@@ -28,19 +28,17 @@ pub fn confirm_dir<T: std::convert::AsRef<path::Path>>(dirname: T) -> Result<(),
         print!("Directory `{}` not found. Create it [y/N]? ", dirname.as_ref().display());
         std::io::stdout().flush().map_err(|e| e.to_string())?;
         let mut answer = String::new();
-        if let Ok(_) = std::io::stdin().read_line(&mut answer) {
-            if answer.starts_with("y") {
-                return std::fs::create_dir(dirname).map_err(|e| e.to_string())
-            }
+        if std::io::stdin().read_line(&mut answer).is_ok() && answer.starts_with('y') {
+            return std::fs::create_dir(dirname).map_err(|e| e.to_string())
         }
-        return Err(format!("Directory not found"))
+        return Err("Directory not found".to_string())
     }
 
     Ok(())
 }
 
 /// Remove file extension and directory path from input string.
-pub fn filename<'a, T>(file: &'a T) -> Option<&'a str>
+pub fn filename<T>(file: &T) -> Option<&str>
 where
     T: AsRef<path::Path>,
 {

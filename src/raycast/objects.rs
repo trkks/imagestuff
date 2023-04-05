@@ -28,9 +28,7 @@ impl Object3D {
             // Inverse transform here in advance, because always used so
             transform: transform.map(|t| 
                 t.inversed()
-                    .expect(
-                        &format!("The matrix does not have an inverse: {}", t)
-                    )
+                    .unwrap_or_else(|| panic!("The matrix does not have an inverse: {}", t))
             ),
             object,
             material: material.unwrap_or_default(),
@@ -43,14 +41,14 @@ impl Intersect for Object3D {
         // Helper to reduce code duplication
         let get_intersection = |r| {
             self.object.iter()
-                .filter_map(|obj| match obj {
-                    &Shape::Sphere { origin, radius } => sphere_intersect(
+                .filter_map(|obj| match *obj {
+                    Shape::Sphere { origin, radius } => sphere_intersect(
                         origin, radius, r, tmin, self.material
                     ),
-                    &Shape::Plane { offset, normal } => plane_intersect(
+                    Shape::Plane { offset, normal } => plane_intersect(
                         offset, normal, r, tmin, self.material
                     ),
-                    &Shape::Triangle { vertices, normal } => triangle_intersect(
+                    Shape::Triangle { vertices, normal } => triangle_intersect(
                         vertices, normal, r, tmin, self.material
                     ),
                 })
@@ -59,7 +57,7 @@ impl Intersect for Object3D {
         };
 
         if let Some(t) = &self.transform {
-            let ray = Ray::with_transform(ray.origin, ray.direction, &t);
+            let ray = Ray::with_transform(ray.origin, ray.direction, t);
             get_intersection(&ray)
                 // If there was an intersection transform its normal to object
                 // space 
@@ -73,7 +71,7 @@ impl Intersect for Object3D {
                     intr
                 })
         } else {
-            get_intersection(&ray)
+            get_intersection(ray)
         }
     }
 }
@@ -156,7 +154,7 @@ fn plane_intersect(
     let denominator = ray.direction.dot(&normal);
 
     // This checks inequality to 0 in floating point
-    if denominator < -f32::EPSILON || f32::EPSILON < denominator {
+    if !(-f32::EPSILON..=f32::EPSILON).contains(&denominator) {
         // Single point of intersection
 
         let nominator = {
@@ -171,7 +169,7 @@ fn plane_intersect(
                     t,
                     incoming: ray.direction,
                     point: ray.cast(t),
-                    normal: normal,
+                    normal,
                     material,
                 }
             )
@@ -201,7 +199,7 @@ fn triangle_intersect(
     let denom = normal_v.dot(&ray.direction.into());
 
     // If ray and normal are orthogonal, then plane and ray are parallel
-    if -f32::EPSILON <= denom && denom <= f32::EPSILON {
+    if (-f32::EPSILON..=f32::EPSILON).contains(&denom) {
         return None
     }
 
