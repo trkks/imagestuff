@@ -1,18 +1,16 @@
-use imagestuff::utils;
-use imagestuff::raycast::{color, scene::Scene, camera::PerspectiveCamera};
+use imagestuff::{utils, raycast::{color, scene::Scene, camera::PerspectiveCamera}};
 
-use std::convert::{TryFrom};
+use std::convert::TryFrom;
 use std::io::{self, Read, Write};
-use std::fs::{File};
+use std::fs::File;
 use std::sync;
-use std::path;
+use std::path::{self, PathBuf};
 use std::error;
 
 use image::{RgbImage, Rgb};
 use serde_json;
 
 use terminal_toys as tt;
-use tt::smargs;
 
 
 const AA_ITERATION_COUNT: usize = 25;
@@ -20,112 +18,110 @@ const AA_ITERATION_COUNT: usize = 25;
 
 type ResultError = Box<dyn error::Error>;
 
-struct RaycastArgs {
-    // Image bounds
-    width: usize,
-    height: usize,
-    thread_count: usize,
-    // This field is here just for defining all the needed arguments.
-    #[allow(dead_code)]
-    source_path: path::PathBuf,
-    output_path: path::PathBuf,
-    scene: Scene,
-    camera: PerspectiveCamera,
+
+struct Args(path::PathBuf, usize, usize, usize, tt::SmargsResult<path::PathBuf>);
+
+fn cli_args() -> Result<Args, String> {
+    tt::smargs!(
+        "Generate an image based on a scene description in JSON",
+        Args(
+            ("Source path of scene in JSON", ["s", "source" ], tt::SmargKind::List(1)),
+            ("Width of result in pixels"   , ["w", "width"  ], tt::SmargKind::Optional("128")),
+            ("Height of result in pixels"  , ["h", "height" ], tt::SmargKind::Optional("96" )),
+            ("Amount of CPU threads to use", ["t", "threads"], tt::SmargKind::Optional("1"  )),
+            ("Output path of the render"   , ["o", "out"    ], tt::SmargKind::Maybe)
+        ),
+    )
+    .help_keys(vec!["help"])
+    .from_env()
+    .map_err(|e| e.to_string())
 }
-impl TryFrom<tt::Smargs> for RaycastArgs {
-    type Error = ResultError;
-    fn try_from(smargs: tt::Smargs) -> Result<Self, Self::Error> {
-        // TODO Return --help if errors
 
-        // Get all the possible program arguments.
-        let source_path  = smargs.gets(&["source",  "s"]);
-        let width        = smargs.gets(&["width",   "w"]);
-        let height       = smargs.gets(&["height",  "h"]);
-        let output_path  = smargs.gets(&["out",     "o"]);
-        let thread_count = smargs.gets(&["threads", "t"]);
+impl Args {
+    fn handle_output_path(
+        width: usize,
+        height: usize,
+        source_path: &PathBuf,
+        output_path: tt::SmargsResult<PathBuf>
+    ) -> Result<PathBuf, String> {
+        const DEFAULT_OUTPUT_DIR: &str = "renders";
 
-        // Secondary check if source path was given as first argument.
-        let source_path: path::PathBuf = source_path.or(smargs.first())
-            .ok()
-            .or_else(|| {
-                // TODO a custom error-type here (or refine smargs)?
-                eprintln!("Need scene's source file as first argument");
-                std::process::exit(1);
-            }).unwrap();
+        // Make sure that output path is Ok.
+        // Handle the error.
+        let generate_default_output = match &output_path.0 {
+            Ok(s) if s.components().next().is_none() => {
+                eprint!("Received empty path. ");
+                true
+            },
+            Err(tt::SmargsError::Dummy(e)) => {
+                eprint!("Failed parsing output path: {}.", e);
+                true
+            },
+            Err(e) => return Err(e.to_string()),
+            _ok => false,
+        };
+        let output_path = if generate_default_output {
+            // Generate the default.
+            eprint!(" Generating a default...");
+            let filename = utils::filename(&source_path)
+                .map(|y| {
+                    // TODO Confirm, that the image format can be determined by `image`(???).
+                    format!("{}_{}x{}.png", y, width, height)
+                }).unwrap_or_else(|| {
+                    eprintln!(
+                        "Failed to extract filename from '{}'",
+                        source_path.display()
+                    );
+                    std::process::exit(1);
+                });
 
-        // 3:4 aspect ratio
-        let (width, height) = (
-            width.or_else(|e| if e.is_not_found() { Ok(128) } else { Err(e) })?,
-            height.or_else(|e| if e.is_not_found() { Ok(96) } else { Err(e) })?,
-        );
+            let y = {
+                let mut p = PathBuf::new();
+                p.push(DEFAULT_OUTPUT_DIR);
+                p.push(filename);
+                p
+            };
 
-        let output_dir = "renders";
-        utils::confirm_dir(output_dir)?;
-        let output_path = if output_path.is_err() {
-            let filename = utils::filename(&source_path).or_else(|| {
-                // TODO a custom error-type here?
-                eprintln!(
-                    "Failed to extract filename from '{}'",
-                    source_path.to_str().unwrap()
-                );
-                std::process::exit(1);
-            }).unwrap();
-            // TODO Relative paths
-            // TODO Allow specifying just the output dir instead of full
-            // filepath (filename still with the same old format!)
-            let out = format!(
-                "./{}/{}_{}x{}.png", output_dir, filename, width, height
-            );
-            eprintln!(
-                "Option '--out' not found. Automatically setting to '{}'", out
-            );
-            path::PathBuf::from(out)
+            eprintln!("automatically setting to '{}'", y.display());
+
+            y
         } else {
-            // TODO Confirm, that the image format can be determined by image.
-            output_path?
+            output_path.0.unwrap()
         };
 
-        let thread_count = thread_count.or_else(|e|
-            if let smargs::SmargError::Key { .. } = e {
-                Ok(4)
-            } else {
-                Err(e)
-            }
-        )?;
+        // Check that directory for output exists before continuing with rendering
+        // and potentially wasting time.
+        utils::confirm_dir(output_path.parent().unwrap_or(&path::PathBuf::from(DEFAULT_OUTPUT_DIR)))?;
 
-        // Load view from file
-        let scene = load_scene(&source_path)
-            .map_err(|e| format!("Loading scene failed - {}", e))?;
-
-        let camera = PerspectiveCamera::with_view(
-            scene.fov,
-            width as f32,
-            height as f32
-        );
-
-        Ok(Self{
-            width,
-            height,
-            thread_count,
-            source_path,
-            output_path,
-            scene,
-            camera,
-        })
+        Ok(output_path)
     }
 }
 
 pub fn main() -> Result<(), ResultError> {
-    let RaycastArgs {
+    let Args(
+        source_path,
         width,
         height,
         thread_count,
-        source_path: _,
         output_path,
-        scene,
-        camera,
-    } = RaycastArgs::try_from(tt::Smargs::from_env()?)?;
+    ) = cli_args()?;
 
+    // Unwrap and check output path.
+    let output_path = Args::handle_output_path(width, height, &source_path, output_path)?;
+
+    // Load view from file
+    let scene = load_scene(&source_path)
+        .map_err(|e| format!("Loading scene failed - {}", e))?;
+
+    let camera = PerspectiveCamera::with_view(
+        scene.fov,
+        width as f32,
+        height as f32
+    );
+
+    // TODO Relative paths
+    // TODO Allow specifying just the output dir instead of full
+    // filepath (filename still with the same old format!)
     let output_path = output_path.to_str().unwrap();
 
     let segment_height = height / thread_count;
@@ -133,8 +129,12 @@ pub fn main() -> Result<(), ResultError> {
 
     println!("Rendering:");
 
-    let camera = sync::Arc::new(camera);
-    let scene = sync::Arc::new(scene);
+    let camera = {
+        sync::Arc::new(camera)
+    };
+    let scene = {
+        sync::Arc::new(scene)
+    };
 
     // Spawn the threads to render in
     for (i, mut progress_bar)

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use image::{Rgb, Pixel};
 
-use terminal_toys::{smargs, Smargs, SmargsResult, SmargKind as Sk, ProgressBar};
+use terminal_toys::{smargs, SmargsResult, SmargKind as Sk, ProgressBar};
 
 use imagestuff::utils;
 
