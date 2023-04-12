@@ -3,64 +3,33 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use image::{Rgb, Pixel};
-
-use terminal_toys::{smargs, SmargsResult, SmargKind as Sk, ProgressBar};
+use terminal_toys::{smargs, SmargsBreak, SmargKind as Sk, ProgressBar};
 
 use imagestuff::utils;
 
 
 const DEFAULT_PALETTE: &str = " -~=o0@#";
 
-
 pub fn main() {
-    let AsciiConfig {
-        source,
-        width,
-        height,
-        inverted,
-        palette,
-    } = match get_config() {
-        // Hmmm...
-        Ok(x) => x,
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    };
-
-    let palette = match palette.0
-        .map(|x| x.chars().collect::<Vec<_>>())
-        .map_err(|e| e.to_string())
+    if let Err(e) = get_config()
+        .map(|AsciiConfig { source, width, height, inverted, palette }|
+            ascii_image(&source, width, height, inverted, palette.chars().collect())
+        )
     {
-        // ... It's almost like ...
-        Ok(x) => x,
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    };
-
-    match ascii_image(&source, width, height, inverted, &palette)
-        .map_err(|e| e.to_string())
-    {
-        // ... Shouldn't there be a simple operator-like way to reduce all this
-        // boilerplate?
-        Ok(x) => x,
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    };
+        eprintln!("{}", e);
+        std::process::exit(1);
+    }
 }
+
 pub struct AsciiConfig {
     source: PathBuf,
     width: u32,
     height: u32,
     inverted: bool,
-    palette: SmargsResult<String>,
+    palette: String,
 }
 
-fn get_config() -> Result<AsciiConfig, String> {
+fn get_config() -> Result<AsciiConfig, SmargsBreak> {
     smargs!(
         "Convert a picture into 'ASCII' (UTF8)",
         AsciiConfig {
@@ -94,7 +63,6 @@ fn get_config() -> Result<AsciiConfig, String> {
     )
     .help_keys(vec!["help"])
     .from_env()
-    .map_err(|x| x.to_string())
 }
 
 // Using ascii characters, generate a textfile representation of an image
@@ -103,7 +71,7 @@ fn ascii_image(
     w: u32,
     h: u32,
     inverted: bool,
-    palette: &[char],
+    palette: Vec<char>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     utils::confirm_dir("ascii")?;
 
@@ -123,7 +91,7 @@ fn ascii_image(
         if i % w as usize == 0 && i != 0 {
             ascii.push('\n');
         }
-        let asciipixel = pixel_to_ascii(pixel, inverted, palette);
+        let asciipixel = pixel_to_ascii(pixel, inverted, &palette);
         // Push twice so that textfile looks more like an image in an editor
         ascii.push(asciipixel);
         ascii.push(asciipixel);
