@@ -7,8 +7,8 @@ use std::io::Read;
 use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
 use crate::utils;
-use crate::raycast::{
-    general::{color::Color, Light, Intersect, Intersection},
+use crate::{
+    color::Color, Light, Intersect, Intersection,
     vector::Vector3,
     ray::Ray,
     objects,

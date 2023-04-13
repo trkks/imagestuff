@@ -1,0 +1,9 @@
+[package]
+name = "utils"
+version = "0.1.0"
+authors = ["Juho Tarkkanen <50268629+trkks@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+image = "0.23.14"
+terminal_toys = { git = "https://github.com/trkks/terminal_toys" }

@@ -1,9 +1,7 @@
-use crate::raycast::{
-    general::{
-        Intersect,
-        Intersection,
-        Material
-    },
+use crate::{
+    Intersect,
+    Intersection,
+    Material,
     matrix,
     ray::Ray,
     vector::{Vector3, UnitVector3, Vector4},

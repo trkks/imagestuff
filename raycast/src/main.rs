@@ -3,8 +3,9 @@ use std::path;
 
 use image::RgbImage;
 use terminal_toys as tt;
+use utils;
 
-use imagestuff::{utils, raycast::{scene, camera, raycaster}};
+use raycast::{scene, camera, raycaster};
 
 
 struct Args(path::PathBuf, usize, usize, usize, tt::SmargsResult<path::PathBuf>);

@@ -1,4 +1,4 @@
-use crate::raycast::{
+use crate::{
     vector::{Vector3, UnitVector3},
     ray::Ray,
 };

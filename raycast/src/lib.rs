@@ -1,9 +1,17 @@
+pub mod camera;
+pub mod raycaster;
+pub mod scene;
+mod matrix;
+mod objects;
+mod ray;
+mod vector;
+
 use std::convert::TryFrom;
 
 use rand::random;
+use utils;
 
-use crate::utils;
-use crate::raycast::{
+use crate::{
     ray::Ray,
     vector::{Vector4, Vector3, UnitVector3},
     matrix::SquareMatrix4,
@@ -109,7 +117,7 @@ pub struct Light {
 }
 
 pub mod color {
-    use crate::raycast::vector::Vector3;
+    use super::vector::Vector3;
     use image::Rgb;
     #[allow(dead_code)]
     pub mod consts {

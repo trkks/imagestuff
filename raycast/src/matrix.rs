@@ -1,11 +1,12 @@
 use std::convert::TryInto;
-use crate::raycast::vector::Vector4;
+use crate::vector::Vector4;
 
 
 fn det2x2(a: f32, b: f32, c: f32, d: f32) -> f32 {
     a * d - b * c
 }
 
+#[allow(clippy::too_many_arguments)]
 fn det3x3(
     a: f32, b: f32, c: f32,
     d: f32, e: f32, f: f32,

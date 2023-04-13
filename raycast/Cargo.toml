@@ -1,0 +1,19 @@
+[package]
+name = "raycast"
+version = "0.1.0"
+authors = ["Juho Tarkkanen <50268629+trkks@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+image = "0.23.14"
+serde = { version = "1.0.125", features = ["derive"] }
+serde_json = "1.0.64"
+rand = "0.8.3"
+utils = { path = "../utils" }
+
+terminal_toys = { git = "https://github.com/trkks/terminal_toys" }

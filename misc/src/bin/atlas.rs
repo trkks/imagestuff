@@ -1,6 +1,6 @@
 use std::path;
 
-use imagestuff::utils;
+use utils;
 
 
 const HELP: &str =

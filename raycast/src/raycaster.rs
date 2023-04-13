@@ -2,7 +2,7 @@ use std::sync;
 
 use terminal_toys as tt;
 
-use crate::raycast::{scene, camera, color};
+use crate::{scene, camera, color};
 
 
 const AA_ITERATION_COUNT: usize = 25;
