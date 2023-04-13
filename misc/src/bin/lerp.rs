@@ -2,7 +2,6 @@ use std::env;
 
 use image::Rgb as Rgb;
 use terminal_toys::ProgressBar;
-use utils;
 
 
 type ImgBuffer16 = image::ImageBuffer<Rgb<u16>, Vec<u16>>;

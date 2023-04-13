@@ -6,7 +6,6 @@ use std::io::Read;
 
 use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
-use crate::utils;
 use crate::{
     color::Color, Light, Intersect, Intersection,
     vector::Vector3,

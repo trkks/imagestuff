@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use image::{Rgb, Pixel};
 use terminal_toys::{smargs, SmargsBreak, SmargKind as Sk, ProgressBar};
-use utils;
 
 
 const DEFAULT_PALETTE: &str = " -~=o0@#";

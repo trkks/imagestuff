@@ -3,7 +3,6 @@ use std::path;
 
 use image::RgbImage;
 use terminal_toys as tt;
-use utils;
 
 use raycast::{scene, camera, raycaster};
 

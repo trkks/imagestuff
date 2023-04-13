@@ -1,7 +1,5 @@
 use std::path;
 
-use utils;
-
 
 const HELP: &str =
 r#"Description:
@@ -89,7 +87,7 @@ fn process(paths: Vec<path::PathBuf>) {
 
     // Combine the images
     for (i, path) in paths.iter().enumerate() {
-        let image = utils::open_decode(&path).unwrap();
+        let image = utils::open_decode(path).unwrap();
         image::imageops::replace(&mut result, &image, i as u32 * max_width, 0);
     }
 

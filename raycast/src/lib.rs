@@ -6,10 +6,10 @@ mod objects;
 mod ray;
 mod vector;
 
+
 use std::convert::TryFrom;
 
 use rand::random;
-use utils;
 
 use crate::{
     ray::Ray,
