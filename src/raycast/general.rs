@@ -136,11 +136,18 @@ pub mod color {
     impl From<Color> for Rgb<u8> {
         fn from(c: Color) -> Self {
             // Taking the square root applies "gamma 2"
-            Rgb([
+            Rgb(c.into())                                                   
+        }
+    }
+
+    impl From<Color> for [u8; 3] {
+        fn from(c: Color) -> Self {
+            // Taking the square root applies "gamma 2"
+            [
                 (c.0.x.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
                 (c.0.y.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
                 (c.0.z.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
-            ])                                                   
+            ]                                                   
         }
     }
 
@@ -165,21 +172,30 @@ pub mod color {
             Color(Vector3::mul(self.0, c))
         }
     }
+
     impl std::ops::Mul<Color> for f32 {
         type Output = Color;
         fn mul(self, c: Color) -> Self::Output {
             Color(Vector3::mul(c.0, self))
         }
     }
+
     impl std::ops::Add for Color {
         type Output = Self;
         fn add(self, other: Color) -> Self::Output {
             Color(self.0 + other.0)
         }
     }
+
     impl std::ops::AddAssign<&Color> for Color {
         fn add_assign(&mut self, other: &Color) {
             self.0 = self.0 + other.0;
+        }
+    }
+    
+    impl std::ops::MulAssign<f32> for Color {
+        fn mul_assign(&mut self, other: f32) {
+            self.0 = self.0 * other;
         }
     }
 }

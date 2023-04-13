@@ -1,22 +1,10 @@
-use imagestuff::{utils, raycast::{color, scene::Scene, camera::PerspectiveCamera}};
+use std::io::{self, Write};
+use std::path;
 
-use std::convert::TryFrom;
-use std::io::{self, Read, Write};
-use std::fs::File;
-use std::sync;
-use std::path::{self, PathBuf};
-use std::error;
-
-use image::{RgbImage, Rgb};
-
-
+use image::RgbImage;
 use terminal_toys as tt;
 
-
-const AA_ITERATION_COUNT: usize = 25;
-
-
-type ResultError = Box<dyn error::Error>;
+use imagestuff::{utils, raycast::{scene, camera, raycaster}};
 
 
 struct Args(path::PathBuf, usize, usize, usize, tt::SmargsResult<path::PathBuf>);
@@ -41,16 +29,16 @@ impl Args {
     fn handle_output_path(
         width: usize,
         height: usize,
-        source_path: &PathBuf,
-        output_path: tt::SmargsResult<PathBuf>
-    ) -> Result<PathBuf, String> {
+        source_path: &path::PathBuf,
+        output_path: tt::SmargsResult<path::PathBuf>
+    ) -> Result<path::PathBuf, String> {
         const DEFAULT_OUTPUT_DIR: &str = "renders";
 
         // Make sure that output path is Ok.
         // Handle the error.
         let generate_default_output = match &output_path.0 {
             Ok(s) if s.components().next().is_none() => {
-                eprint!("Received empty path. ");
+                eprint!("No output path received.");
                 true
             },
             Err(tt::SmargsError::Dummy(e)) => {
@@ -76,7 +64,7 @@ impl Args {
                 });
 
             let y = {
-                let mut p = PathBuf::new();
+                let mut p = path::PathBuf::new();
                 p.push(DEFAULT_OUTPUT_DIR);
                 p.push(filename);
                 p
@@ -97,115 +85,35 @@ impl Args {
     }
 }
 
-pub fn main() -> Result<(), ResultError> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let Args(
         source_path,
         width,
         height,
         thread_count,
         output_path,
-    ) = cli_args()?;
+    ) = cli_args().unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
 
     // Unwrap and check output path.
+    // TODO Relative paths
+    // TODO Allow specifying just the output dir instead of full filepath
+    // (filename still with the same old format!)
     let output_path = Args::handle_output_path(width, height, &source_path, output_path)?;
 
-    // Load view from file
-    let scene = load_scene(&source_path)
-        .map_err(|e| format!("Loading scene failed - {}", e))?;
-
-    let camera = PerspectiveCamera::with_view(
-        scene.fov,
-        width as f32,
-        height as f32
-    );
-
-    // TODO Relative paths
-    // TODO Allow specifying just the output dir instead of full
-    // filepath (filename still with the same old format!)
-    let output_path = output_path.to_str().unwrap();
-
-    let segment_height = height / thread_count;
-    let mut img_threads = Vec::with_capacity(thread_count);
-
-    println!("Rendering:");
-
-    let camera = {
-        sync::Arc::new(camera)
-    };
-    let scene = {
-        sync::Arc::new(scene)
+    let raycaster = {
+        let scene = scene::Scene::from_file(&source_path)?;
+        let camera = camera::PerspectiveCamera::with_view(scene.fov, width, height);
+        raycaster::Raycaster { scene, camera }
     };
 
-    // Spawn the threads to render in
-    for (i, mut progress_bar)
-        in tt::ProgressBar::multiple(
-                width * height,
-                25,
-                thread_count
-            )
-            .into_iter()
-            .enumerate()
-    {
-        let arc_camera = sync::Arc::clone(&camera);
-        let arc_scene = sync::Arc::clone(&scene);
-
-        // Every pixel in segment counts towards progress
-        progress_bar.title(&format!("  Thread #{} progress", i + 1));
-
-        let y_range = {
-            // Iterate the coordinates in image segments
-            let start = i * segment_height;
-            let mut end = start + segment_height;
-            // The last created thread takes the remaining rows as well
-            if i == thread_count - 1 {
-                end += height % thread_count;
-            }
-            start..end
-        };
-
-        let mut img_vec =
-            Vec::with_capacity(width * y_range.len());
-
-        img_threads.push(
-            std::thread::spawn(move || {
-               for iy in y_range {
-                    for ix in 0..width {
-                        img_vec.push(
-                            shade_pixel(
-                                ix, iy,
-                                width, height,
-                                &arc_camera, &arc_scene
-                            )
-                        );
-                        progress_bar.lap()
-                            .expect("Progress bar print failure");
-                    }
-                }
-                // Return the rendered pixels in segment
-                img_vec
-            })
-        );
-    }
-
-    // Wait for rendering threads to finish and combine the rendered segments
-    // in order
-    let mut img_combined = Vec::with_capacity(width * height);
-    for t in img_threads {
-        img_combined.append(&mut t.join().unwrap());
-    }
-
-    // Move command line cursor to bottom of progress bars
-    print!("\x1b[{}B", thread_count);
-
-    // Use `from_fn` instead of `from_vec` in order to not manually handle
-    // unwrapping the Subpixel -associated-type
-    let image = RgbImage::from_fn(
-        width as u32, height as u32,
-        |ix, iy| img_combined[iy as usize * width + ix as usize]
-    );
+    let image = RgbImage::from_vec(width as u32, height as u32, raycaster.render_rgb_flat(thread_count))
+        .unwrap();
 
     // Write to image file
-    print!("\nSaving to {} ", output_path);
+    print!("\nSaving to {} ", output_path.display());
 
     // Saving could fail for example if a previous file is open; ask to retry
     while let Err(e)
@@ -227,53 +135,6 @@ pub fn main() -> Result<(), ResultError> {
             return Err(Box::new(e) as Box<dyn std::error::Error>)
         }
     }
+
     Ok(())
-}
-
-fn load_scene(filepath: &path::PathBuf) -> Result<Scene, ResultError> {
-    let mut file = File::open(filepath)?;
-
-    let mut contents = String::from("");
-    file.read_to_string(&mut contents)?;
-
-    let mut json: serde_json::Value =
-        serde_json::from_str(&contents)?;
-
-    Scene::try_from(&mut json)
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-}
-
-fn shade_pixel(
-    ix: usize,
-    iy: usize,
-    width: usize,
-    height: usize,
-    camera: &sync::Arc<PerspectiveCamera>,
-    scene: &sync::Arc<Scene>,
-) -> Rgb<u8> {
-    let mut color = color::consts::BLACK;
-
-    // Anti-aliasing: sample each pixel in some pattern and return average
-    // TODO Separate AA into a general function; AA works on a pixel:
-    // 1) get location and size of a pixel (input: rectangle)
-    // 2) shoot rays into these bounds (output: coordinates)
-    for _ in 0..AA_ITERATION_COUNT {
-        let (tx, ty) = (
-            rand::random::<f32>(),
-            rand::random::<f32>(),
-        );
-        // Calculate image plane coordinates x,y so that they're in [-1, 1]
-        let x: f32 = (ix as f32 + tx) / width as f32 * 2.0 - 1.0;
-        // y is negated to transform from raster-space (ie. origin top left)
-        // into screen-space (origin bottom left)
-        let y: f32 = -((iy as f32 + ty) / height as f32 * 2.0 - 1.0);
-
-        let ray = camera.shoot_at(x, y);
-
-        // Shade the pixel with RGB color; 6 traces/reflections are made for
-        // each intersection
-        color += &scene.trace(&ray, 6);
-    }
-
-    Rgb::<u8>::from(color * (1.0 / AA_ITERATION_COUNT as f32))
 }

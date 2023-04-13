@@ -1,5 +1,9 @@
 use std::convert::{TryFrom, TryInto};
 use std::collections;
+use std::fs;
+use std::path;
+use std::io::Read;
+
 use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
 
 use crate::utils;
@@ -20,6 +24,20 @@ pub struct Scene {
 }
 
 impl Scene {
+    pub fn from_file(source_path: &path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+        // Load view from file
+        let mut file = fs::File::open(source_path)?;
+
+        let mut contents = String::from("");
+        file.read_to_string(&mut contents)?;
+
+        let mut json: serde_json::Value =
+            serde_json::from_str(&contents)?;
+
+        Self::try_from(&mut json)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
+
     /// Recursive function that traces the ray `n` times
     pub fn trace(&self, ray: &Ray, n: usize) -> Color {
         // Shade with ambient color each time
