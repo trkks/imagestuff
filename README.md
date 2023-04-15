@@ -5,9 +5,9 @@ Collection of small command-line programs that have something to do with image-f
 ### ascii
 Turn an image into ASCII-text.
 
-Running this for the [Rust](https://www.rust-lang.org/) logo with: 
+Running this for the Rust logo with: 
 ```
-cargo run --bin ascii .\images\rustlogo.png -w 20 --inverted --palette "░▒▓█"
+cargo run --bin ascii ./images/rustlogo.png -w 20 --inverted --palette "░▒▓█"
 ```
 produces:
 ```
@@ -39,10 +39,10 @@ various ray-tracing guides and some code initially translated from a university 
 
 Running:
 ```
-cargo run --bin raycast .\raycast_scenes\plane_sphere_triangle.json -w 1024 -h 512
+cargo run --bin raycast ./raycast/scenes/plane_sphere_triangle.json -w 1024 -h 512
 ```
 produces:
-![](https://github.com/trkks/imagestuff/blob/main/renders/plane_sphere_triangle_1024x512.png)
+![](raycast/renders/plane_sphere_triangle_1024x512.png)
 
 ### atlas
 Glue a list of images together into a row. Can be used to make batches of animation-sheets of game-sprites for example.
