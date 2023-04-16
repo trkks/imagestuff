@@ -1,17 +1,18 @@
 use std::fs::File;
+use std::convert::TryFrom;
 use std::io::Write;
 use std::path::PathBuf;
 
 use image::{Rgb, Pixel};
-use terminal_toys::{smargs, SmargsBreak, SmargKind as Sk, ProgressBar};
+use terminal_toys::{Smargs, Smarg, SmargsError, smargs, SmargsBreak, SmargKind as Sk, ProgressBar};
 
 
 const DEFAULT_PALETTE: &str = " -~=o0@#";
 
 pub fn main() {
-    if let Err(e) = get_config()
-        .map(|AsciiConfig { source, width, height, inverted, palette }|
-            ascii_image(&source, width, height, inverted, palette.chars().collect())
+    if let Err(e) = cli_config()
+        .map(|AsciiConfig { source, width, height, palette }|
+            ascii_image(&source, width, height, palette)
         )
     {
         eprintln!("{}", e);
@@ -19,46 +20,71 @@ pub fn main() {
     }
 }
 
-pub struct AsciiConfig {
+/// Config for storing information needed for reading an image made of pixels
+/// (not e.g. vectors) and converting its pixels to a scaled version of
+/// requested `palette`.
+pub struct AsciiConfig<PP> {
     source: PathBuf,
     width: u32,
     height: u32,
-    inverted: bool,
-    palette: String,
+    palette: Vec<PP>,
 }
 
-fn get_config() -> Result<AsciiConfig, SmargsBreak> {
-    smargs!(
+impl TryFrom<Smargs<AsciiConfig<char>>> for AsciiConfig<char> {
+    type Error = SmargsError;
+
+    fn try_from(mut value: Smargs<AsciiConfig<char>>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            source:  value.parse_next()?,
+            width:   value.parse_next()?,
+            height:  value.parse_next()?,
+            palette: value.parse_next::<String>()?.chars().collect(),
+        })
+    }
+}
+
+fn cli_config() -> Result<AsciiConfig<char>, SmargsBreak> {
+    // TODO: Update this when tt supports passing type parameters...
+    Smargs::with_definition(
         "Convert a picture into 'ASCII' (UTF8)",
-        AsciiConfig {
-            source:(
-                "Path to picture to convert",
-                ["source", "s"],
-                Sk::Required
-            ),
-            width:(
-                "Amount of columns in result (this is doubled for better \
-                terminal visuals so give half if you want exact width)",
-                ["width", "w"],
-                Sk::Optional("50"),
-            ),
-            height:(
-                "Amount of rows in result",
-                ["height", "h"],
-                Sk::Optional("50")
-            ),
-            inverted:(
-                "Output 'black on white' for light-colored terminal",
-                ["inverted", "i"],
-                Sk::Flag
-            ),
-            palette:(
-                "UTF8 character-set to use",
-                ["palette", "p"],
-                Sk::Optional(DEFAULT_PALETTE)
-            )
-        }
-    )
+        [
+            ("", vec![], Sk::Required),
+            ("", vec![], Sk::Required),
+            ("", vec![], Sk::Required),
+            ("", vec![], Sk::Required),
+        ])
+
+    //smargs!(
+    //    "Convert a picture into 'ASCII' (UTF8)",
+    //    AsciiConfig<char> {
+    //        source:(
+    //            "Path to picture to convert",
+    //            ["source", "s"],
+    //            Sk::Required
+    //        ),
+    //        width:(
+    //            "Amount of columns in result (this is doubled for better \
+    //            terminal visuals so give half if you want exact width)",
+    //            ["width", "w"],
+    //            Sk::Optional("50"),
+    //        ),
+    //        height:(
+    //            "Amount of rows in result",
+    //            ["height", "h"],
+    //            Sk::Optional("50")
+    //        ),
+    //        inverted:(
+    //            "Output 'black on white' for light-colored terminal",
+    //            ["inverted", "i"],
+    //            Sk::Flag
+    //        ),
+    //        palette:(
+    //            "UTF8 character-set to use",
+    //            ["palette", "p"],
+    //            Sk::Optional(DEFAULT_PALETTE)
+    //        )
+    //    }
+    //)
     .help_keys(vec!["help"])
     .from_env()
 }
@@ -68,7 +94,6 @@ fn ascii_image(
     srcfile: &dyn AsRef<std::path::Path>,
     w: u32,
     h: u32,
-    inverted: bool,
     palette: Vec<char>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     utils::confirm_dir("ascii")?;
@@ -89,7 +114,7 @@ fn ascii_image(
         if i % w as usize == 0 && i != 0 {
             ascii.push('\n');
         }
-        let asciipixel = pixel_to_ascii(pixel, inverted, &palette);
+        let asciipixel = pixel_to_ascii(pixel, &palette);
         // Push twice so that textfile looks more like an image in an editor
         ascii.push(asciipixel);
         ascii.push(asciipixel);
@@ -114,7 +139,6 @@ fn ascii_image(
 /// If `inverted`, the text is black on white background and vice versa.
 fn pixel_to_ascii(
     pixel: Rgb<u16>,
-    inverted: bool,
     palette: &[char],
 ) -> char {
     // TODO Somehow normalize the "span" of brightness to the palette so that
@@ -122,7 +146,7 @@ fn pixel_to_ascii(
     let brightness = pixel.to_luma().0[0] as f32 / u16::MAX as f32;
     let i = (brightness * (palette.len() - 1) as f32) as usize;
 
-    palette[if inverted { palette.len() - 1 - i } else { i }]
+    palette[i]
 }
 
 #[cfg(test)]
@@ -136,29 +160,25 @@ mod tests {
         let palette = DEFAULT_PALETTE.chars().collect::<Vec<char>>();
 
         assert_eq!(
-            pixel_to_ascii(Rgb([n, n, n]), false, &palette),
+            pixel_to_ascii(Rgb([n, n, n]), &palette),
             '#'
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), false, &palette),
+            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), &palette),
             '='
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([0, 0, 0]), false, &palette),
-            ' '
-        );
-
-        assert_eq!(
-            pixel_to_ascii(Rgb([n, n, n]), true, &palette),
+            pixel_to_ascii(Rgb([0, 0, 0]), &palette),
             ' '
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), true, &palette),
+            // Inverted palette.
+            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), &palette.clone().into_iter().rev().collect::<Vec<char>>()),
             'o'
         );
         assert_eq!(
-            pixel_to_ascii(Rgb([0, 0, 0]), true, &palette),
-            '#'
+            pixel_to_ascii(Rgb([0, 0, 0]), &palette),
+            ' '
         );
     }
 }
