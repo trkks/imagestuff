@@ -11,8 +11,13 @@ const DEFAULT_PALETTE: &str = " -~=o0@#";
 
 pub fn main() {
     if let Err(e) = cli_config()
-        .map(|AsciiConfig { source, width, height, palette }|
-            ascii_image(&source, width, height, palette)
+        .map(|AsciiConfig { source, width, height, inverted, palette }|
+            ascii_image(
+                &source,
+                width,
+                height,
+                if inverted { palette.chars().rev().collect() } else { palette.chars().collect() },
+            )
         )
     {
         eprintln!("{}", e);
@@ -23,68 +28,46 @@ pub fn main() {
 /// Config for storing information needed for reading an image made of pixels
 /// (not e.g. vectors) and converting its pixels to a scaled version of
 /// requested `palette`.
-pub struct AsciiConfig<PP> {
+pub struct AsciiConfig {
     source: PathBuf,
     width: u32,
     height: u32,
-    palette: Vec<PP>,
+    inverted: bool,
+    palette: String,
 }
 
-impl TryFrom<Smargs<AsciiConfig<char>>> for AsciiConfig<char> {
-    type Error = SmargsError;
-
-    fn try_from(mut value: Smargs<AsciiConfig<char>>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            source:  value.parse_next()?,
-            width:   value.parse_next()?,
-            height:  value.parse_next()?,
-            palette: value.parse_next::<String>()?.chars().collect(),
-        })
-    }
-}
-
-fn cli_config() -> Result<AsciiConfig<char>, SmargsBreak> {
-    // TODO: Update this when tt supports passing type parameters...
-    Smargs::with_definition(
+fn cli_config() -> Result<AsciiConfig, SmargsBreak> {
+    smargs!(
         "Convert a picture into 'ASCII' (UTF8)",
-        [
-            ("", vec![], Sk::Required),
-            ("", vec![], Sk::Required),
-            ("", vec![], Sk::Required),
-            ("", vec![], Sk::Required),
-        ])
-
-    //smargs!(
-    //    "Convert a picture into 'ASCII' (UTF8)",
-    //    AsciiConfig<char> {
-    //        source:(
-    //            "Path to picture to convert",
-    //            ["source", "s"],
-    //            Sk::Required
-    //        ),
-    //        width:(
-    //            "Amount of columns in result (this is doubled for better \
-    //            terminal visuals so give half if you want exact width)",
-    //            ["width", "w"],
-    //            Sk::Optional("50"),
-    //        ),
-    //        height:(
-    //            "Amount of rows in result",
-    //            ["height", "h"],
-    //            Sk::Optional("50")
-    //        ),
-    //        inverted:(
-    //            "Output 'black on white' for light-colored terminal",
-    //            ["inverted", "i"],
-    //            Sk::Flag
-    //        ),
-    //        palette:(
-    //            "UTF8 character-set to use",
-    //            ["palette", "p"],
-    //            Sk::Optional(DEFAULT_PALETTE)
-    //        )
-    //    }
-    //)
+        AsciiConfig {
+            source:(
+                "Path to picture to convert",
+                ["source", "s"],
+                Sk::Required
+            ),
+            width:(
+                "Amount of columns in result (this is doubled for better \
+                terminal visuals so give half if you want exact width)",
+                ["width", "w"],
+                Sk::Optional("50"),
+            ),
+            height:(
+                "Amount of rows in result",
+                ["height", "h"],
+                Sk::Optional("50")
+            ),
+            inverted:(
+                "Output 'black on white' for light-colored terminal",
+                ["inverted", "i"],
+                Sk::Flag
+            ),
+            palette:(
+                "UTF8 character-set to use",
+                ["palette", "p"],
+                Sk::Optional(DEFAULT_PALETTE)
+            )
+        }
+    )
     .help_keys(vec!["help"])
     .from_env()
 }
