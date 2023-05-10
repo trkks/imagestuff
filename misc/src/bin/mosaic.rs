@@ -1,45 +1,117 @@
 use std::fs::File;
-use std::convert::TryFrom;
+use std::str::FromStr;
 use std::io::Write;
 use std::path::PathBuf;
 
 use image::{Rgb, Pixel};
-use terminal_toys::{Smargs, Smarg, SmargsError, smargs, SmargsBreak, SmargKind as Sk, ProgressBar};
+use terminal_toys::{smargs, SmargsBreak, SmargsResult, SmargKind as Sk, ProgressBar};
 
 
 const DEFAULT_PALETTE: &str = " -~=o0@#";
 
 pub fn main() {
-    if let Err(e) = cli_config()
-        .map(|AsciiConfig { source, width, height, inverted, palette }|
-            ascii_image(
+    match cli_config() {
+        Ok(CliConfig { source, width, height, inverted, palette, output }) => {
+            match ascii_image(
                 &source,
                 width,
                 height,
                 if inverted { palette.chars().rev().collect() } else { palette.chars().collect() },
-            )
-        )
-    {
-        eprintln!("{}", e);
-        std::process::exit(1);
+            ) {
+                Ok(ascii) => {
+                    match output.0 {
+                        Ok(StdoutOrPath::Path(p)) => {
+                            let mut output = PathBuf::new();
+                            if p.is_dir() {
+                                output.push(p);
+                                output.push(&source.file_stem().expect("source file bad"));
+                                output.set_extension("txt");
+                            } else if let Some(parent) = p.parent() {
+                                if let Some(dir) = parent.file_name() {
+                                    if let Err(e) = utils::confirm_dir(&dir) {
+                                        eprintln!("{}", e);
+                                        std::process::exit(1);
+                                    }
+                                }
+                                output.push(p)
+                            } else {
+                                output.push(&source.file_stem().expect("source file bad"));
+                                output.set_extension("txt");
+                            }
+                            eprintln!("\nSaving to {}", output.display());
+
+                            let mut file = match File::create(output) {
+                                Ok(x) => x,
+                                Err(e) => {
+                                    eprintln!("{}", e);
+                                    std::process::exit(1);
+                                }
+                            };
+
+                            if let Err(e) = file.write_all(
+                                ascii.as_bytes()
+                            ) {
+                                eprintln!("{}", e);
+                                std::process::exit(1);
+                            }
+                        },
+                        Ok(StdoutOrPath::Stdout) => {
+                            println!("{}", ascii)
+                        },
+                        Err(e) => {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                },
+                Err(e) => {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+        },
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        },
+    }
+}
+
+#[derive(Debug)]
+enum StdoutOrPath {
+    Path(PathBuf),
+    Stdout,
+}
+
+impl FromStr for StdoutOrPath {
+    type Err = <PathBuf as FromStr>::Err;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "-" {
+            Ok(Self::Stdout)
+        } else {
+            Ok(Self::Path(PathBuf::from_str(value)?))
+        }
     }
 }
 
 /// Config for storing information needed for reading an image made of pixels
 /// (not e.g. vectors) and converting its pixels to a scaled version of
 /// requested `palette`.
-pub struct AsciiConfig {
+#[derive(Debug)]
+struct CliConfig {
     source: PathBuf,
     width: u32,
     height: u32,
     inverted: bool,
     palette: String,
+    output: SmargsResult<StdoutOrPath>,
 }
 
-fn cli_config() -> Result<AsciiConfig, SmargsBreak> {
+fn cli_config() -> Result<CliConfig, SmargsBreak> {
     smargs!(
         "Convert a picture into 'ASCII' (UTF8)",
-        AsciiConfig {
+        CliConfig {
             source:(
                 "Path to picture to convert",
                 ["source", "s"],
@@ -65,6 +137,11 @@ fn cli_config() -> Result<AsciiConfig, SmargsBreak> {
                 "UTF8 character-set to use",
                 ["palette", "p"],
                 Sk::Optional(DEFAULT_PALETTE)
+            ),
+            output:(
+                "Filepath to save the result in or '-' for printing to stdout",
+                ["out", "o"],
+                Sk::Maybe
             )
         }
     )
@@ -78,9 +155,7 @@ fn ascii_image(
     w: u32,
     h: u32,
     palette: Vec<char>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    utils::confirm_dir("ascii")?;
-
+) -> Result<String, Box<dyn std::error::Error>> {
     // First open imagefile, confirming its validity
     let img = utils::open_decode(srcfile)?;
     // Then turn the image into a processable format for the ascii conversion
@@ -103,19 +178,10 @@ fn ascii_image(
         ascii.push(asciipixel);
 
         progress.title(&format!("{}/{}", i+1, n));
-        progress.ulap();
+        //progress.ulap();
     }
 
-    let newfile = format!(
-        "./ascii/{}.txt",
-        utils::filename(&srcfile).ok_or("No filename on source")?
-    );
-    println!("\nSaving to {}", newfile);
-
-    let mut file = File::create(newfile)?;
-
-    file.write_all(ascii.into_iter().collect::<String>().as_bytes())
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    Ok(ascii.into_iter().collect::<String>())
 }
 
 /// Get an ascii character that looks like the brightness of the pixel.
