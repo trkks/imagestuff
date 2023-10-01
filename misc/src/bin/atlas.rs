@@ -14,7 +14,7 @@ Examples:
 "#;
 
 pub fn main() {
-    if let Some(paths) = piped_input().or_else(cl_args) {
+    if let Some(paths) = cl_args() {
         println!("{:?}", paths);
         process(paths);
     } else {
@@ -23,6 +23,7 @@ pub fn main() {
 }
 
 fn piped_input() -> Option<Vec<path::PathBuf>> {
+    eprintln!("Trying to read pipe...");
     let stdin = std::io::stdin();
     let mut input = String::new();
     let mut paths = Vec::new();
@@ -40,6 +41,7 @@ fn piped_input() -> Option<Vec<path::PathBuf>> {
 
 
 fn cl_args() -> Option<Vec<path::PathBuf>> {
+    eprintln!("Trying to read CLI args...");
     // TODO Use terminal_toys::Smargs
     let mut args = std::env::args();
     // Skip executable name
@@ -66,30 +68,13 @@ fn get_path(x: &str, paths: &mut Vec<path::PathBuf>) {
 
 fn process(paths: Vec<path::PathBuf>) {
     println!("{:?}", paths);
-    let user_output = std::env::args().nth(1);
-    // The resulting image will be sized by the maximum dimensions times the
-    // number of input images
-    // TODO Should the dimensions be decided based on the first image?
-    let (max_width, max_height) = {
-        // TODO This could possibly be done simpler by scanning?
-        let (widths, heights): (Vec<u32>,Vec<u32>) = paths.iter()
-            .map(|x| image::image_dimensions(x).unwrap())
-            .unzip();
-        (*widths.iter().max().unwrap(), *heights.iter().max().unwrap())
-    };
 
-    // TODO organize width and height according to the wanted dimensions of the
-    // resulting atlas
-    let mut result = image::ImageBuffer::new(
-        max_width * paths.len() as u32,
-        max_height
+    let result = misc::atlas(
+        paths.iter().map(|x| utils::open_decode(x).unwrap()).collect()
     );
 
-    // Combine the images
-    for (i, path) in paths.iter().enumerate() {
-        let image = utils::open_decode(path).unwrap();
-        image::imageops::replace(&mut result, &image, i as u32 * max_width, 0);
-    }
+    let user_output = std::env::args().nth(1);
+
 
     // Save the result to the wanted file if given
     // TODO Should the decided dimensions (size of a single "frame" and the
