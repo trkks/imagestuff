@@ -8,6 +8,24 @@ use terminal_toys::{smargs, SmargsBreak, SmargsResult, SmargKind as Sk};
 
 const DEFAULT_PALETTE: &str = " -~=o0@#";
 
+
+#[derive(Debug)]
+enum Palette {
+    Ascii(String),
+    RaycastSpheres,
+}
+
+impl FromStr for Palette {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value {
+            "spheres" => Self::RaycastSpheres,
+            x         => Self::Ascii(x.to_owned()),
+        })
+    }
+}
+
 #[derive(Debug)]
 enum StdoutOrPath {
     Path(PathBuf),
@@ -35,7 +53,7 @@ struct CliConfig {
     width: u32,
     height: u32,
     inverted: bool,
-    palette: String,
+    palette: Palette,
     output: SmargsResult<StdoutOrPath>,
 }
 
@@ -87,13 +105,27 @@ pub fn main() {
             // First open imagefile, confirming its validity
             let img = utils::open_decode(&source)
                 .expect("bad path for source image");
+            let renderer = match palette {
+                Palette::Ascii(ascii_string) =>
+                    Box::new(move || misc::mosaic::ascii_image(
+                        img,
+                        width,
+                        height,
+                        if inverted {
+                            ascii_string.chars().rev().collect()
+                        } else {
+                            ascii_string.chars().collect()
+                        },
+                    )) as Box<dyn FnOnce() -> Result<String, Box<dyn std::error::Error>>>,
+                Palette::RaycastSpheres => 
+                    Box::new(|| misc::mosaic::raycast_sphere_image(
+                        img,
+                        width,
+                        height,
+                    )) as Box<dyn FnOnce() -> Result<String, Box<dyn std::error::Error>>>,
+            };
 
-            match misc::mosaic::ascii_image(
-                img,
-                width,
-                height,
-                if inverted { palette.chars().rev().collect() } else { palette.chars().collect() },
-            ) {
+            match renderer() {
                 Ok(ascii) => {
                     match output.0 {
                         Ok(StdoutOrPath::Path(p)) => {

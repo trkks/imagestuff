@@ -1,7 +1,17 @@
 use image::{Rgb, Pixel, DynamicImage};
 
 
-// Using ascii characters, generate a textfile representation of an image
+/// Generate a raycast-crate compatible scene description with spheres of input
+/// image.
+pub fn raycast_sphere_image(
+    img: DynamicImage,
+    w: u32,
+    h: u32,
+) -> Result<String, Box<dyn std::error::Error>> {
+    todo!()
+}
+
+/// Generate an ASCII representation of input image.
 pub fn ascii_image(
     img: DynamicImage,
     w: u32,
