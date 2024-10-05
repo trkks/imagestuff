@@ -7,7 +7,7 @@ use terminal_toys as tt;
 use raycast::{scene, camera, raycaster};
 
 
-struct Args(path::PathBuf, usize, usize, usize, tt::smargs::Result<path::PathBuf>);
+struct Args(path::PathBuf, usize, usize, usize, bool, tt::smargs::Result<path::PathBuf>);
 
 fn cli_args() -> Result<Args, String> {
     tt::smärgs!(
@@ -17,6 +17,7 @@ fn cli_args() -> Result<Args, String> {
             ("Width of result in pixels"   , ["w", "width"  ], tt::smargs::Kind::Optional("128")),
             ("Height of result in pixels"  , ["h", "height" ], tt::smargs::Kind::Optional("96" )),
             ("Amount of CPU threads to use", ["t", "threads"], tt::smargs::Kind::Optional("1"  )),
+            ("If should use debug coloring", ["d", "debug"], tt::smargs::Kind::Flag),
             ("Output path of the render"   , ["o", "out"    ], tt::smargs::Kind::Maybe)
         ),
     )
@@ -91,6 +92,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         width,
         height,
         thread_count,
+        is_debug,
         output_path,
     ) = cli_args().unwrap_or_else(|e| {
         eprintln!("{}", e);
@@ -109,7 +111,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         raycaster::Raycaster { scene, camera }
     };
 
-    let image = RgbImage::from_vec(width as u32, height as u32, raycaster.render_rgb_flat(thread_count))
+    let image = RgbImage::from_vec(width as u32, height as u32, raycaster.render_rgb_flat(thread_count, is_debug))
         .unwrap();
 
     // Write to image file

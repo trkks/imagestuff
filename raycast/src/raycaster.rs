@@ -16,7 +16,7 @@ pub struct Raycaster {
 impl Raycaster {
     /// Render the scene into a one-dimensional array of RGB-bytes (i.e., three
     /// (3) bytes per pixel) using `thread_count` concurrent threads.
-    pub fn render_rgb_flat(self, thread_count: usize) -> Vec<u8> {
+    pub fn render_rgb_flat(self, thread_count: usize, is_debug: bool) -> Vec<u8> {
         let (width, height) = self.camera.image_dimensions();
         let segment_height = height / thread_count;
         let mut img_threads = Vec::with_capacity(thread_count);
@@ -68,7 +68,8 @@ impl Raycaster {
                                 &shade_pixel(
                                     ix, iy,
                                     width, height,
-                                    &arc_camera, &arc_scene
+                                    &arc_camera, &arc_scene,
+                                    is_debug,
                                 )
                             );
                             progress_bar.lap()
@@ -102,6 +103,7 @@ fn shade_pixel(
     height: usize,
     camera: &sync::Arc<camera::PerspectiveCamera>,
     scene: &sync::Arc<scene::Scene>,
+    debug: bool,
 ) -> [u8;3] {
     let mut color = color::consts::BLACK;
 
@@ -122,9 +124,13 @@ fn shade_pixel(
 
         let ray = camera.shoot_at(x, y);
 
-        // Shade the pixel with RGB color; 6 traces/reflections are made for
-        // each intersection
-        color += &scene.trace(&ray, 6);
+        if debug {
+            color += &scene.color_debug(&ray);
+        } else {
+            // Shade the pixel with RGB color; 6 traces/reflections are made for
+            // each intersection
+            color += &scene.trace(&ray, 6);
+        }
     }
 
     color *= 1.0 / AA_ITERATION_COUNT as f32;
