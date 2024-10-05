@@ -7,17 +7,17 @@ use terminal_toys as tt;
 use raycast::{scene, camera, raycaster};
 
 
-struct Args(path::PathBuf, usize, usize, usize, tt::SmargsResult<path::PathBuf>);
+struct Args(path::PathBuf, usize, usize, usize, tt::smargs::Result<path::PathBuf>);
 
 fn cli_args() -> Result<Args, String> {
-    tt::smargs!(
+    tt::smärgs!(
         "Generate an image based on a scene description in JSON",
         Args(
-            ("Source path of scene in JSON", ["s", "source" ], tt::SmargKind::List(1)),
-            ("Width of result in pixels"   , ["w", "width"  ], tt::SmargKind::Optional("128")),
-            ("Height of result in pixels"  , ["h", "height" ], tt::SmargKind::Optional("96" )),
-            ("Amount of CPU threads to use", ["t", "threads"], tt::SmargKind::Optional("1"  )),
-            ("Output path of the render"   , ["o", "out"    ], tt::SmargKind::Maybe)
+            ("Source path of scene in JSON", ["s", "source" ], tt::smargs::Kind::List(1)),
+            ("Width of result in pixels"   , ["w", "width"  ], tt::smargs::Kind::Optional("128")),
+            ("Height of result in pixels"  , ["h", "height" ], tt::smargs::Kind::Optional("96" )),
+            ("Amount of CPU threads to use", ["t", "threads"], tt::smargs::Kind::Optional("1"  )),
+            ("Output path of the render"   , ["o", "out"    ], tt::smargs::Kind::Maybe)
         ),
     )
     .help_keys(vec!["help"])
@@ -30,7 +30,7 @@ impl Args {
         width: usize,
         height: usize,
         source_path: &path::PathBuf,
-        output_path: tt::SmargsResult<path::PathBuf>
+        output_path: tt::smargs::Result<path::PathBuf>
     ) -> Result<path::PathBuf, String> {
         const DEFAULT_OUTPUT_DIR: &str = "renders";
 
@@ -41,7 +41,7 @@ impl Args {
                 eprint!("No output path received.");
                 true
             },
-            Err(tt::SmargsError::Dummy(e)) => {
+            Err(tt::smargs::Error::Dummy(e)) => {
                 eprint!("Failed parsing output path: {}.", e);
                 true
             },

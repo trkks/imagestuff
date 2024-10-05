@@ -42,14 +42,12 @@
             "transform": "Translate 0 -0.5 -2",
             "object": [
                 {
-                    "Sphere": {
-                        "origin": [0.80, 0, -1.5],
-                        "radius": 0.5,
-                        "material": {
-                            "color": [255, 0, 0],
-                            "shininess": 10
-                        }
+                    "Torus": {
+                        "origin": [-0.8, 0, 0.5],
+                        "inner_radius": 0.5,
+                        "tube_radius": 0.25
                     }
+ 
                 },
                 {
                     "Sphere": {

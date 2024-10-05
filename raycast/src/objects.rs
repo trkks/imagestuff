@@ -49,6 +49,9 @@ impl Intersect for Object3D {
                     Shape::Triangle { vertices, normal } => triangle_intersect(
                         vertices, normal, r, tmin, self.material
                     ),
+                    Shape::Torus { origin, inner_radius, tube_radius } => torus_intersect(
+                        origin, inner_radius, tube_radius, r, tmin, self.material
+                    ),
                 })
                 // Select the intersection closest to ray
                 .reduce(|acc, x| if x.t < acc.t { x } else { acc })
@@ -89,6 +92,11 @@ pub enum Shape {
         vertices: [Vector3; 3],
         normal: UnitVector3,
     },
+    Torus {
+        origin: Vector3,
+        inner_radius: f32,
+        tube_radius: f32,
+    },
 }
 
 fn sphere_intersect(
@@ -107,23 +115,10 @@ fn sphere_intersect(
         to_ray_origin.dot(&to_ray_origin) - radius.powi(2)
     );
 
-    let discriminant = b.powi(2) - 4.0 * a * c;
-    // Check that ray hits the sphere
-    if discriminant < 0.0 { return None }
-
-    // The distances from ray origin to intersection point
-    let (t1, t2) = (
-        (-b + discriminant.sqrt()) / (2.0 * a),
-        (-b - discriminant.sqrt()) / (2.0 * a)
-    );
-
     // Check that the intersection is greater than minimum and select the
     // intersection closest to ray origin
-    // TODO Is this tmin float-comparison accurate enough?
-    let closest =
-        if      tmin < t1 && t1 < t2 { Some(t1) }
-        else if tmin < t2 && t2 < t1 { Some(t2) }
-        else { None };
+    let closest = solve_quadratic(a, b, c)
+        .and_then(|xs| min_greater_than(tmin, &xs));
 
     if let Some(t) = closest {
         let point = ray.cast(t);
@@ -282,4 +277,134 @@ fn triangle_intersect(
     //    }
     //}
     //None
+}
+
+/// Kudos: 
+/// - http://cosinekitty.com/raytrace/chapter13_torus.html
+/// - https://en.wikipedia.org/wiki/Quartic_equation
+fn torus_intersect(
+    origin: Vector3,
+    hr: f32, // Hole radius.
+    tr: f32, // Tube radius.
+    ray: &Ray,
+    tmin: f32,
+    material: Material,
+) -> Option<Intersection> {
+    let ev = ray.direction;
+    let dp = ray.origin;
+
+    let g = 4.0 * hr.powi(2) * (ev.x().powi(2) + ev.y().powi(2));
+    let h = 8.0 * hr.powi(2) * (dp.x * ev.x() + dp.y * ev.y());
+    let i = 4.0 * hr.powi(2) * (dp.x.powi(2) + dp.y.powi(2));
+    let j = ev.x().powi(2) + ev.y().powi(2) + ev.z().powi(2);
+    let k = 2.0 * (dp.x * ev.x() + dp.y * ev.y() + dp.z * ev.z());
+    let l = dp.x.powi(2) + dp.y.powi(2) + dp.z.powi(2) + hr.powi(2) - tr.powi(2);
+
+    let (a_, b_, c_, d, e) = (
+        j.powi(2),
+        2.0 * j * k,
+        (2.0 * j * l + k.powi(2) - g),
+        (2.0 * k * l - h),
+        (l.powi(2) -i),
+    );
+
+    // TODO "If b is not already zero..."
+    
+    // Make the equation depressed.
+    let a = (-3.0 * b_.powi(2)) / (8.0 * a_.powi(2))
+        + c_ / a_;
+    let c = (-3.0 * b_.powi(4)) / (256.0 * a_.powi(4))
+        + (c_ * b_.powi(2)) / (16.0 * a_.powi(3))
+        - (b_ * d) / (4.0 * a_.powi(2))
+        + e / a_;
+
+    let closest = if (-f32::EPSILON..=f32::EPSILON).contains(&b_) {
+        // Solve biquadratic equation.
+        solve_quadratic(1.0, a, c)
+            .map(|xs|{
+                // Filter out complex solutions.
+                let t1 = if xs[0] < 0.0 { tmin } else {  xs[0].sqrt() };
+                let t2 = if xs[0] < 0.0 { tmin } else { -xs[0].sqrt() };
+                let t3 = if xs[1] < 0.0 { tmin } else {  xs[1].sqrt() };
+                let t4 = if xs[1] < 0.0 { tmin } else { -xs[1].sqrt() };
+                return [t1, t2, t3, t4];
+            })
+    } else {
+        let b = (b_.powi(3) / 8.0 * a_.powi(3))
+            - (b_ * c_) / (2.0 * a_.powi(2))
+            + d / a_;
+ 
+        solve_depressed_quartic(a, b, c)
+    }.and_then(|xs| min_greater_than(tmin, &xs));
+    if let Some(_) = closest {
+        println!("{:?}", closest);
+    }
+
+    if let Some(t) = closest {
+        let point = ray.cast(t);
+        let normal = (point - origin).normalized();
+        Some(
+            Intersection {
+                t,
+                incoming: ray.direction,
+                point,
+                normal,
+                material,
+            }
+        )
+    } else {
+        None
+    } 
+}
+
+fn solve_quadratic(a: f32, b: f32, c: f32) -> Option<[f32; 2]> {
+    let discriminant = b.powi(2) - 4.0 * a * c;
+    // Check for hit at all.
+    if discriminant < 0.0 {
+        None
+    } else {
+        Some([
+            (-b + discriminant.sqrt()) / (2.0 * a),
+            (-b - discriminant.sqrt()) / (2.0 * a)
+        ])
+    }
+}
+
+/// NOTE: Assuming b != 0.
+fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Option<[f32; 4]> {
+    let p = -(a.powi(2) / 12.0)
+        - c;
+    let q = -(a.powi(3) / 108.0)
+        + (a * c) / 3.0
+        - b.powi(2) / 8.0;
+    let w = (
+        -(q / 2.0)
+        + (
+            q.powi(2) / 4.0
+            + p.powi(3) / 27.0
+        ).sqrt()
+    ).cbrt();
+    let y = a / 6.0
+        + w
+        - p / (3.0 * w);
+    Some([
+        0.5 * (-(2.0 * y - a).sqrt() + (-2.0 * y - a + ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
+        0.5 * (-(2.0 * y - a).sqrt() - (-2.0 * y - a + ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
+        0.5 * ( (2.0 * y - a).sqrt() + (-2.0 * y - a - ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
+        0.5 * ( (2.0 * y - a).sqrt() - (-2.0 * y - a - ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
+    ])
+}
+
+fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
+    // TODO Is this tmin float-comparison accurate enough?
+    ts.iter()
+        .min_by(|lhs, rhs|
+            if lhs < rhs {
+                std::cmp::Ordering::Less
+            } else if lhs > rhs {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        ).and_then(|x| if tmin < *x { Some(*x) } else { None })
 }
