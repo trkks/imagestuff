@@ -146,8 +146,7 @@ fn plane_intersect(
 ) -> Option<Intersection> {
     let denominator = ray.direction.dot(&normal);
 
-    // This checks inequality to 0 in floating point
-    if !(-f32::EPSILON..=f32::EPSILON).contains(&denominator) {
+    if !is_zero(denominator) {
         // Single point of intersection
 
         let nominator = {
@@ -192,7 +191,7 @@ fn triangle_intersect(
     let denom = normal_v.dot(&ray.direction.into());
 
     // If ray and normal are orthogonal, then plane and ray are parallel
-    if (-f32::EPSILON..=f32::EPSILON).contains(&denom) {
+    if is_zero(denom) {
         return None
     }
 
@@ -279,7 +278,7 @@ fn triangle_intersect(
     //None
 }
 
-/// Kudos: 
+/// Kudos:
 /// - http://cosinekitty.com/raytrace/chapter13_torus.html
 /// - https://en.wikipedia.org/wiki/Quartic_equation
 fn torus_intersect(
@@ -290,6 +289,8 @@ fn torus_intersect(
     tmin: f32,
     material: Material,
 ) -> Option<Intersection> {
+    // Build the terms for torus equation.
+
     let ev = ray.direction;
     let dp = ray.origin;
 
@@ -300,49 +301,29 @@ fn torus_intersect(
     let k = 2.0 * (dp.x * ev.x() + dp.y * ev.y() + dp.z * ev.z());
     let l = dp.x.powi(2) + dp.y.powi(2) + dp.z.powi(2) + hr.powi(2) - tr.powi(2);
 
-    let (a_, b_, c_, d, e) = (
+    let (a, b, c, d, e) = (
         j.powi(2),
         2.0 * j * k,
         (2.0 * j * l + k.powi(2) - g),
         (2.0 * k * l - h),
-        (l.powi(2) -i),
+        (l.powi(2) - i),
     );
 
-    // TODO "If b is not already zero..."
-    
-    // Make the equation depressed.
-    let a = (-3.0 * b_.powi(2)) / (8.0 * a_.powi(2))
-        + c_ / a_;
-    let c = (-3.0 * b_.powi(4)) / (256.0 * a_.powi(4))
-        + (c_ * b_.powi(2)) / (16.0 * a_.powi(3))
-        - (b_ * d) / (4.0 * a_.powi(2))
-        + e / a_;
+    let closest = min_greater_than(tmin, &solve_quartic(a, b, c, d, e));
 
-    let closest = if (-f32::EPSILON..=f32::EPSILON).contains(&b_) {
-        // Solve biquadratic equation.
-        solve_quadratic(1.0, a, c)
-            .map(|xs|{
-                // Filter out complex solutions.
-                let t1 = if xs[0] < 0.0 { tmin } else {  xs[0].sqrt() };
-                let t2 = if xs[0] < 0.0 { tmin } else { -xs[0].sqrt() };
-                let t3 = if xs[1] < 0.0 { tmin } else {  xs[1].sqrt() };
-                let t4 = if xs[1] < 0.0 { tmin } else { -xs[1].sqrt() };
-                return [t1, t2, t3, t4];
-            })
-    } else {
-        let b = (b_.powi(3) / 8.0 * a_.powi(3))
-            - (b_ * c_) / (2.0 * a_.powi(2))
-            + d / a_;
- 
-        solve_depressed_quartic(a, b, c)
-    }.and_then(|xs| min_greater_than(tmin, &xs));
-    if let Some(_) = closest {
-        println!("{:?}", closest);
-    }
+    //if let Some(_) = closest {
+    //    println!("{:?}", closest);
+    //}
 
     if let Some(t) = closest {
         let point = ray.cast(t);
-        let normal = (point - origin).normalized();
+        let normal = {
+            let p = (point - origin).normalized();
+            let pshadow = Vector3{ x: p.x(), y: p.y(), z: 0.0 }.normalized();
+            // Point in the center of tube.
+            let q = hr * pshadow;
+            (point - q).normalized()
+        };
         Some(
             Intersection {
                 t,
@@ -370,8 +351,39 @@ fn solve_quadratic(a: f32, b: f32, c: f32) -> Option<[f32; 2]> {
     }
 }
 
+fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
+    // TODO "If b is not already zero..."
+    
+    // Make the equation depressed.
+    let a = (-3.0 * b_.powi(2)) / (8.0 * a_.powi(2))
+        + c_ / a_;
+    let c = (-3.0 * b_.powi(4)) / (256.0 * a_.powi(4))
+        + (c_ * b_.powi(2)) / (16.0 * a_.powi(3))
+        - (b_ * d) / (4.0 * a_.powi(2))
+        + e / a_;
+
+
+    if is_zero(b_) {
+        // Solve biquadratic equation.
+        let Some([x1, x2]) = solve_quadratic(1.0, a, c) else { return vec![] };
+        let mut ts = vec![];
+        // Filter out complex solutions.
+        if x1 > 0.0 { ts.push( x1.sqrt()); ts.push(-(x1.sqrt())); }
+        if x2 > 0.0 { ts.push( x2.sqrt()); ts.push(-(x2.sqrt())); }
+        ts
+    } else {
+        let b = (b_.powi(3) / 8.0 * a_.powi(3))
+            - (b_ * c_) / (2.0 * a_.powi(2))
+            + d / a_;
+ 
+        solve_depressed_quartic(a, b, c)
+    }
+    // "substituting ... x = u - B / 4A produces the values for x that solve the original quartic"
+    .into_iter().map(|x| x - (b_ / (4.0 * a_))).collect()
+}
+
 /// NOTE: Assuming b != 0.
-fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Option<[f32; 4]> {
+fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Vec<f32> {
     let p = -(a.powi(2) / 12.0)
         - c;
     let q = -(a.powi(3) / 108.0)
@@ -387,12 +399,12 @@ fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Option<[f32; 4]> {
     let y = a / 6.0
         + w
         - p / (3.0 * w);
-    Some([
+    vec![
         0.5 * (-(2.0 * y - a).sqrt() + (-2.0 * y - a + ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
         0.5 * (-(2.0 * y - a).sqrt() - (-2.0 * y - a + ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
         0.5 * ( (2.0 * y - a).sqrt() + (-2.0 * y - a - ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
         0.5 * ( (2.0 * y - a).sqrt() - (-2.0 * y - a - ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
-    ])
+    ]
 }
 
 fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
@@ -407,4 +419,9 @@ fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
                 std::cmp::Ordering::Equal
             }
         ).and_then(|x| if tmin < *x { Some(*x) } else { None })
+}
+
+/// Check inequality to 0 in floating point.
+fn is_zero(x: f32) -> bool {
+    (-f32::EPSILON..=f32::EPSILON).contains(&x)
 }
