@@ -283,7 +283,7 @@ fn triangle_intersect(
 /// - https://en.wikipedia.org/wiki/Quartic_equation
 fn torus_intersect(
     origin: Vector3,
-    hr: f32, // Hole radius.
+    ir: f32, // Inner radius.
     tr: f32, // Tube radius.
     ray: &Ray,
     tmin: f32,
@@ -294,12 +294,12 @@ fn torus_intersect(
     let ev = ray.direction;
     let dp = ray.origin;
 
-    let g = 4.0 * hr.powi(2) * (ev.x().powi(2) + ev.y().powi(2));
-    let h = 8.0 * hr.powi(2) * (dp.x * ev.x() + dp.y * ev.y());
-    let i = 4.0 * hr.powi(2) * (dp.x.powi(2) + dp.y.powi(2));
+    let g = 4.0 * ir.powi(2) * (ev.x().powi(2) + ev.y().powi(2));
+    let h = 8.0 * ir.powi(2) * (dp.x * ev.x() + dp.y * ev.y());
+    let i = 4.0 * ir.powi(2) * (dp.x.powi(2) + dp.y.powi(2));
     let j = ev.x().powi(2) + ev.y().powi(2) + ev.z().powi(2);
     let k = 2.0 * (dp.x * ev.x() + dp.y * ev.y() + dp.z * ev.z());
-    let l = dp.x.powi(2) + dp.y.powi(2) + dp.z.powi(2) + hr.powi(2) - tr.powi(2);
+    let l = dp.x.powi(2) + dp.y.powi(2) + dp.z.powi(2) + ir.powi(2) - tr.powi(2);
 
     let (a, b, c, d, e) = (
         j.powi(2),
@@ -321,7 +321,7 @@ fn torus_intersect(
             let p = (point - origin).normalized();
             let pshadow = Vector3{ x: p.x(), y: p.y(), z: 0.0 }.normalized();
             // Point in the center of tube.
-            let q = hr * pshadow;
+            let q = ir * pshadow;
             (point - q).normalized()
         };
         Some(
@@ -352,18 +352,19 @@ fn solve_quadratic(a: f32, b: f32, c: f32) -> Option<[f32; 2]> {
 }
 
 fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
-    // TODO "If b is not already zero..."
-    
     // Make the equation depressed.
     let a = (-3.0 * b_.powi(2)) / (8.0 * a_.powi(2))
         + c_ / a_;
+    let b = b_.powi(3) / (8.0 * a_.powi(3))
+        - (b_ * c_) / (2.0 * a_.powi(2))
+        + d / a_;
     let c = (-3.0 * b_.powi(4)) / (256.0 * a_.powi(4))
         + (c_ * b_.powi(2)) / (16.0 * a_.powi(3))
         - (b_ * d) / (4.0 * a_.powi(2))
         + e / a_;
 
 
-    if is_zero(b_) {
+    if is_zero(b) {
         // Solve biquadratic equation.
         let Some([x1, x2]) = solve_quadratic(1.0, a, c) else { return vec![] };
         let mut ts = vec![];
@@ -372,10 +373,6 @@ fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
         if x2 > 0.0 { ts.push( x2.sqrt()); ts.push(-(x2.sqrt())); }
         ts
     } else {
-        let b = (b_.powi(3) / 8.0 * a_.powi(3))
-            - (b_ * c_) / (2.0 * a_.powi(2))
-            + d / a_;
- 
         solve_depressed_quartic(a, b, c)
     }
     // "substituting ... x = u - B / 4A produces the values for x that solve the original quartic"
