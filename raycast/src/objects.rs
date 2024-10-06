@@ -459,6 +459,8 @@ fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
 #[cfg(test)]
 /// Kudos:
 /// https://jwilson.coe.uga.edu/EMAT6680Fa09/Davenport/Solving%20Quartic%20Equations.pdf
+/// https://mathmonks.com/quartic-function
+/// https://www.onlinemath4all.com/roots-of-polynomial-of-degree-4.html
 mod test_quartic {
     use super::*;
 
@@ -476,7 +478,7 @@ mod test_quartic {
     }
 
     #[test]
-    fn three_real_roots_test() {
+    fn four_real_roots_1_test() {
         let roots = [5.0, 3.0, -4.0, -6.0];
         let ys = solve_quartic(
                3.0,
@@ -485,12 +487,40 @@ mod test_quartic {
             -126.0,
             1080.0,
         );
-        assert_eq!(roots.len(), ys.len());
+        assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
     }
 
     #[test]
-    fn two_real_roots_test() {
+    fn four_real_roots_2_test() {
+        let roots = [-3.0, -2.0, 1.0, 2.0];
+        let ys = solve_quartic(
+             1.0,
+             2.0,
+            -7.0,
+            -8.0,
+            12.0,
+        );
+        assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
+        assert_all_answers_found(&roots, &ys);
+    }
+
+    #[test]
+    fn four_real_roots_3_test() {
+        let roots = [2.0, 4.0, -3.0, -5.0];
+        let ys = solve_quartic(
+             1.0,
+             2.0,
+           -25.0,
+           -26.0,
+           120.0,
+        );
+        assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
+        assert_all_answers_found(&roots, &ys);
+    }
+
+    #[test]
+    fn two_real_roots_1_test() {
         let roots = [1.488, -1.682];
         let ys = solve_quartic(
             -20.0,
@@ -499,7 +529,21 @@ mod test_quartic {
             -29.0,
              87.0,
         );
-        assert_eq!(roots.len(), ys.len());
+        assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
+        assert_all_answers_found(&roots, &ys);
+    }
+
+    #[test]
+    fn two_real_roots_2_test() {
+        let roots = [-1.21716, 1.4255];
+        let ys = solve_quartic(
+            -10.0,
+              1.0,
+             17.0,
+              2.0,
+              1.0,
+        );
+        assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
     }
 }
