@@ -370,7 +370,7 @@ fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
     if is_zero(b) {
         // Solve biquadratic equation.
         if let Some([x1, x2]) = solve_quadratic(1.0, a, c) {
-            // Filter out complex solutions.
+            // "Extract x" and also filter out any complex solutions.
             if is_positive(x1) {
                 ts.push(x1.sqrt());
                 ts.push(-x1.sqrt());
@@ -381,7 +381,7 @@ fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
             } 
         }
     } else if let Some(ts_) = solve_depressed_quartic(a, b, c) {
-            ts.extend(ts_);
+        ts.extend(ts_);
     }
     // Wikipedia: "substituting ... x = u - B / 4A produces the values for x that solve the
     // original quartic"
@@ -444,12 +444,12 @@ fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
     // TODO Is this tmin float-comparison accurate enough?
     ts.iter()
         .min_by(|lhs, rhs|
-            if lhs < rhs {
-                std::cmp::Ordering::Less
-            } else if lhs > rhs {
+            if is_zero(*lhs - *rhs) {
+                std::cmp::Ordering::Equal
+            } else if is_positive(*lhs - *rhs) {
                 std::cmp::Ordering::Greater
             } else {
-                std::cmp::Ordering::Equal
+                std::cmp::Ordering::Less
             }
         ).and_then(|x| if tmin < *x { Some(*x) } else { None })
 }
