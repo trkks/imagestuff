@@ -1,0 +1,24 @@
+{
+    "fov": 90,
+    "ambient_color": [16, 16, 16],
+    "lights": [
+        {
+            "position": [1, 1, 1],
+            "color": [255, 255, 255],
+            "intensity": 1.0
+        }
+    ],
+    "named": {},
+    "objects": [
+       {
+            "transform": "RotX -45; Translate 0 0.5 -0.5",
+            "object": {
+                "Torus": {
+                    "origin": [0, 0, 0],
+                    "inner_radius": 0.25,
+                    "tube_radius": 0.125
+                }
+            }
+        }
+    ]
+}
