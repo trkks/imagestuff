@@ -415,7 +415,6 @@ fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Option<[f32; 4]> {
         return None;
     }
     let e = e_.sqrt();
-    // e could not be zero, as it is checked positive above.
     let f_ = (2.0 * b) / e;
     if !is_positive(f_) {
         return None;
@@ -440,16 +439,67 @@ fn is_zero(x: f32) -> bool {
     (-f32::EPSILON..=f32::EPSILON).contains(&x)
 }
 
+fn cmp(lhs: &f32, rhs: &f32) -> std::cmp::Ordering {
+    if is_zero(*lhs - *rhs) {
+        std::cmp::Ordering::Equal
+    } else if is_positive(*lhs - *rhs) {
+        std::cmp::Ordering::Greater
+    } else {
+        std::cmp::Ordering::Less
+    }
+}
+
 fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
     // TODO Is this tmin float-comparison accurate enough?
     ts.iter()
-        .min_by(|lhs, rhs|
-            if is_zero(*lhs - *rhs) {
-                std::cmp::Ordering::Equal
-            } else if is_positive(*lhs - *rhs) {
-                std::cmp::Ordering::Greater
-            } else {
-                std::cmp::Ordering::Less
+        .min_by(|lhs, rhs| cmp(*lhs, *rhs))
+        .and_then(|x| if tmin < *x { Some(*x) } else { None })
+}
+
+#[cfg(test)]
+/// Kudos:
+/// https://jwilson.coe.uga.edu/EMAT6680Fa09/Davenport/Solving%20Quartic%20Equations.pdf
+mod test_quartic {
+    use super::*;
+
+    fn assert_all_answers_found(answer: &[f32], result: &[f32]) {
+        let mut answer = answer.to_vec();
+        answer.sort_by(cmp);
+        let mut result = result.to_vec();
+        result.sort_by(cmp);
+        for (a, r) in answer.iter().zip(result.iter()) {
+            let x = a - r;
+            if !is_zero(x) {
+                assert_eq!(a, r);
             }
-        ).and_then(|x| if tmin < *x { Some(*x) } else { None })
+        }
+    }
+
+    #[test]
+    fn three_real_roots_test() {
+        let roots = [5.0, 3.0, -4.0, -6.0];
+        let ys = solve_quartic(
+               3.0,
+               6.0,
+            -123.0,
+            -126.0,
+            1080.0,
+        );
+        assert_eq!(roots.len(), ys.len());
+        assert_all_answers_found(&roots, &ys);
+    }
+
+    #[test]
+    fn two_real_roots_test() {
+        let roots = [1.488, -1.682];
+        let ys = solve_quartic(
+            -20.0,
+              5.0,
+             17.0,
+            -29.0,
+             87.0,
+        );
+        assert_eq!(roots.len(), ys.len());
+        assert_all_answers_found(&roots, &ys);
+    }
 }
