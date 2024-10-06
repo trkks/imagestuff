@@ -1,6 +1,6 @@
 {
     "fov": 90,
-    "ambient_color": [0, 0, 0],
+    "ambient_color": [8, 8, 8],
 
     "lights": [
         {
@@ -54,6 +54,7 @@
             ]
         },
         {
+            "transform": "RotX -10",
             "object": {
                 "Plane": {
                     "offset": 1,
@@ -66,7 +67,7 @@
             "object": "unit_triangle"
         },
         {
-            "transform": "RotX 45",
+            "transform": "RotX 80; Translate 0.5 -1 0; RotY 40",
             "object": {
                 "Torus": {
                     "origin": [0, 0, 0],

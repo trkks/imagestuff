@@ -309,7 +309,10 @@ fn torus_intersect(
         (l.powi(2) - i),
     );
 
-    let closest = min_greater_than(tmin, &solve_quartic(a, b, c, d, e));
+    let closest = {
+        let xs = solve_quartic(a, b, c, d, e);
+        min_greater_than(tmin, &xs)
+    };
 
     //if let Some(_) = closest {
     //    println!("{:?}", closest);
@@ -341,7 +344,7 @@ fn torus_intersect(
 fn solve_quadratic(a: f32, b: f32, c: f32) -> Option<[f32; 2]> {
     let discriminant = b.powi(2) - 4.0 * a * c;
     // Check for hit at all.
-    if discriminant < 0.0 {
+    if !is_positive(discriminant) {
         None
     } else {
         Some([
@@ -363,45 +366,78 @@ fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
         - (b_ * d) / (4.0 * a_.powi(2))
         + e / a_;
 
-
+    let mut ts = vec![];
     if is_zero(b) {
         // Solve biquadratic equation.
-        let Some([x1, x2]) = solve_quadratic(1.0, a, c) else { return vec![] };
-        let mut ts = vec![];
-        // Filter out complex solutions.
-        if x1 > 0.0 { ts.push( x1.sqrt()); ts.push(-(x1.sqrt())); }
-        if x2 > 0.0 { ts.push( x2.sqrt()); ts.push(-(x2.sqrt())); }
-        ts
-    } else {
-        solve_depressed_quartic(a, b, c)
+        if let Some([x1, x2]) = solve_quadratic(1.0, a, c) {
+            // Filter out complex solutions.
+            if is_positive(x1) {
+                ts.push(x1.sqrt());
+                ts.push(-x1.sqrt());
+            }
+            if is_positive(x2) {
+                ts.push(x2.sqrt());
+                ts.push(-x2.sqrt());
+            } 
+        }
+    } else if let Some(ts_) = solve_depressed_quartic(a, b, c) {
+            ts.extend(ts_);
     }
-    // "substituting ... x = u - B / 4A produces the values for x that solve the original quartic"
-    .into_iter().map(|x| x - (b_ / (4.0 * a_))).collect()
+    // Wikipedia: "substituting ... x = u - B / 4A produces the values for x that solve the
+    // original quartic"
+    ts.into_iter().map(|x| x - (b_ / (4.0 * a_))).collect()
 }
 
 /// NOTE: Assuming b != 0.
-fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Vec<f32> {
+fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Option<[f32; 4]> {
     let p = -(a.powi(2) / 12.0)
         - c;
+
     let q = -(a.powi(3) / 108.0)
         + (a * c) / 3.0
         - b.powi(2) / 8.0;
-    let w = (
-        -(q / 2.0)
-        + (
-            q.powi(2) / 4.0
-            + p.powi(3) / 27.0
-        ).sqrt()
-    ).cbrt();
+
+    let w_ = q.powi(2) / 4.0
+        + p.powi(3) / 27.0;
+    if !is_positive(w_) {
+        return None;
+    }
+    let w__ = -(q / 2.0)
+        + w_.sqrt();
+    let w = w__.cbrt();
+
     let y = a / 6.0
         + w
         - p / (3.0 * w);
-    vec![
-        0.5 * (-(2.0 * y - a).sqrt() + (-2.0 * y - a + ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
-        0.5 * (-(2.0 * y - a).sqrt() - (-2.0 * y - a + ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
-        0.5 * ( (2.0 * y - a).sqrt() + (-2.0 * y - a - ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
-        0.5 * ( (2.0 * y - a).sqrt() - (-2.0 * y - a - ((2.0 * b) / (2.0 * y - a).sqrt()).sqrt())),
-    ]
+
+    let e_ = 2.0 * y - a;
+    if !is_positive(e_) {
+        return None;
+    }
+    let e = e_.sqrt();
+    // e could not be zero, as it is checked positive above.
+    let f_ = (2.0 * b) / e;
+    if !is_positive(f_) {
+        return None;
+    }
+    let f = f_.sqrt();
+    let g = -2.0 * y - a;
+
+    Some([
+        0.5 * (-e + (g + f)),
+        0.5 * (-e - (g + f)),
+        0.5 * ( e + (g - f)),
+        0.5 * ( e - (g - f)),
+    ])
+}
+
+fn is_positive(x: f32) -> bool {
+    x > f32::EPSILON
+}
+
+/// Check inequality to 0 in floating point.
+fn is_zero(x: f32) -> bool {
+    (-f32::EPSILON..=f32::EPSILON).contains(&x)
 }
 
 fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
@@ -416,9 +452,4 @@ fn min_greater_than(tmin: f32, ts: &[f32]) -> Option<f32> {
                 std::cmp::Ordering::Equal
             }
         ).and_then(|x| if tmin < *x { Some(*x) } else { None })
-}
-
-/// Check inequality to 0 in floating point.
-fn is_zero(x: f32) -> bool {
-    (-f32::EPSILON..=f32::EPSILON).contains(&x)
 }
