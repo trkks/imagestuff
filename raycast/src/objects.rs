@@ -310,7 +310,7 @@ fn torus_intersect(
     );
 
     let closest = {
-        let xs = solve_quartic(a, b, c, d, e);
+        let xs = solve_quartic(b, c, d, e);
         min_greater_than(tmin, &xs)
     };
 
@@ -354,17 +354,22 @@ fn solve_quadratic(a: f32, b: f32, c: f32) -> Option<[f32; 2]> {
     }
 }
 
-fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
+/// Solving:
+/// a4 * x^4 + a3 * x^3 + a2 x^2 + a1 * x + a0 = 0
+/// NOTE: a4 == 1.0
+fn solve_quartic(a3: f32, a2: f32, a1: f32, a0: f32) -> Vec<f32> {
+    let a4 = 1.0_f32;
+
     // Make the equation depressed.
-    let a = (-3.0 * b_.powi(2)) / (8.0 * a_.powi(2))
-        + c_ / a_;
-    let b = b_.powi(3) / (8.0 * a_.powi(3))
-        - (b_ * c_) / (2.0 * a_.powi(2))
-        + d / a_;
-    let c = (-3.0 * b_.powi(4)) / (256.0 * a_.powi(4))
-        + (c_ * b_.powi(2)) / (16.0 * a_.powi(3))
-        - (b_ * d) / (4.0 * a_.powi(2))
-        + e / a_;
+    let a = (-3.0 * a3.powi(2)) / (8.0 * a4.powi(2))
+        + a2 / a4;
+    let b = a3.powi(3) / (8.0 * a4.powi(3))
+        - (a3 * a2) / (2.0 * a4.powi(2))
+        + a1 / a4;
+    let c = (-3.0 * a3.powi(4)) / (256.0 * a4.powi(4))
+        + (a2 * a3.powi(2)) / (16.0 * a4.powi(3))
+        - (a3 * a1) / (4.0 * a4.powi(2))
+        + a0 / a4;
 
     let mut ts = vec![];
     if is_zero(b) {
@@ -385,7 +390,7 @@ fn solve_quartic(a_: f32, b_: f32, c_: f32, d: f32, e: f32) -> Vec<f32> {
     }
     // Wikipedia: "substituting ... x = u - B / 4A produces the values for x that solve the
     // original quartic"
-    ts.into_iter().map(|x| x - (b_ / (4.0 * a_))).collect()
+    ts.into_iter().map(|x| x - (a3 / (4.0 * a4))).collect()
 }
 
 /// NOTE: Assuming b != 0.
@@ -479,9 +484,8 @@ mod test_quartic {
 
     #[test]
     fn four_real_roots_1_test() {
-        let roots = [5.0, 3.0, -4.0, -6.0];
+        let roots = [-13.82772, -3.37935, 2.72474, 8.48233];
         let ys = solve_quartic(
-               3.0,
                6.0,
             -123.0,
             -126.0,
@@ -495,7 +499,6 @@ mod test_quartic {
     fn four_real_roots_2_test() {
         let roots = [-3.0, -2.0, 1.0, 2.0];
         let ys = solve_quartic(
-             1.0,
              2.0,
             -7.0,
             -8.0,
@@ -509,7 +512,6 @@ mod test_quartic {
     fn four_real_roots_3_test() {
         let roots = [2.0, 4.0, -3.0, -5.0];
         let ys = solve_quartic(
-             1.0,
              2.0,
            -25.0,
            -26.0,
@@ -521,13 +523,12 @@ mod test_quartic {
 
     #[test]
     fn two_real_roots_1_test() {
-        let roots = [1.488, -1.682];
+        let roots = [0.0, 1.19013];
         let ys = solve_quartic(
-            -20.0,
               5.0,
              17.0,
             -29.0,
-             87.0,
+             0.0,
         );
         assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
@@ -535,13 +536,12 @@ mod test_quartic {
 
     #[test]
     fn two_real_roots_2_test() {
-        let roots = [-1.21716, 1.4255];
+        let roots = [-0.31082, 0.18978];
         let ys = solve_quartic(
-            -10.0,
               1.0,
              17.0,
               2.0,
-              1.0,
+             -1.0,
         );
         assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
