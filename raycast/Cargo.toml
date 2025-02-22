@@ -10,9 +10,6 @@ edition = "2018"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-image = "0.23.14"
-serde = { version = "1.0.125", features = ["derive"] }
-serde_json = "1.0.64"
 rand = "0.8.3"
 utils = { path = "../utils" }
 
