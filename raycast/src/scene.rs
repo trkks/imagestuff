@@ -1,25 +1,19 @@
-use std::convert::{TryFrom, TryInto};
 use std::collections;
+use std::convert::{TryFrom, TryInto};
 use std::fs;
-use std::path;
 use std::io::Read;
+use std::path;
 
-use serde_json::{from_value, Value as SerdeValue, Error as SerdeError};
+use serde_json::{from_value, Error as SerdeError, Value as SerdeValue};
 
-use crate::{
-    color::Color, Light, Intersect, Intersection,
-    vector::Vector3,
-    ray::Ray,
-    objects,
-};
-
+use crate::{color::Color, objects, ray::Ray, vector::Vector3, Intersect, Intersection, Light};
 
 /// A collection of things used in rendering a scene
 pub struct Scene {
     pub ambient_color: Color,
     pub fov: f32,
     lights: Vec<Light>,
-    objects: Vec<objects::Object3D>
+    objects: Vec<objects::Object3D>,
 }
 
 impl Scene {
@@ -30,11 +24,9 @@ impl Scene {
         let mut contents = String::from("");
         file.read_to_string(&mut contents)?;
 
-        let mut json: serde_json::Value =
-            serde_json::from_str(&contents)?;
+        let mut json: serde_json::Value = serde_json::from_str(&contents)?;
 
-        Self::try_from(&mut json)
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        Self::try_from(&mut json).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 
     /// Recursive function that traces the ray `n` times
@@ -78,7 +70,7 @@ impl Scene {
                             let s = intr.normal.dot(&bisector);
                             color += &(
                                 // Diffuse
-                                  intr.material.color
+                                intr.material.color
                                 * intensity
                                 * d
                                 // Specular
@@ -94,11 +86,11 @@ impl Scene {
                 // Reflections: Add color seen by reflected ray to current ray
                 let reflected_ray = Ray {
                     origin: off_surface,
-                    direction: intr.incoming.reflect(&intr.normal)
+                    direction: intr.incoming.reflect(&intr.normal),
                 };
 
                 // Recursive call TODO Add attenuation from reflection
-                return color + self.trace(&reflected_ray, n - 1)
+                return color + self.trace(&reflected_ray, n - 1);
             }
         }
         // End recursion:
@@ -143,15 +135,16 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
             } else if x.is_array() {
                 from_value::<Vec<objects::Shape>>(x)
             } else {
-                Err(<SerdeError as serde::de::Error>::custom(
-                    format!("Expected an object or array; got {}", x)
-                ))
+                Err(<SerdeError as serde::de::Error>::custom(format!(
+                    "Expected an object or array; got {}",
+                    x
+                )))
             }
         };
 
         // Form a collection of string:vec<shape> -pairs
-        let mut named: collections::HashMap::<String, Vec<objects::Shape>> 
-            = collections::HashMap::new();
+        let mut named: collections::HashMap<String, Vec<objects::Shape>> =
+            collections::HashMap::new();
         if let SerdeValue::Object(map) = json["named"].take() {
             named.reserve(map.len());
             for (key, value) in map {
@@ -167,14 +160,17 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
             objects.reserve(vec.len());
             for (i, mut value) in vec.into_iter().enumerate() {
                 // Parse transform matrix from string
-                let transform = from_value::<Option<String>>(
-                        value["transform"].take()
-                    )?
+                let transform = from_value::<Option<String>>(value["transform"].take())?
                     .as_ref()
-                    .map(|s| s[..].try_into()
-                        .unwrap_or_else(|_| panic!("Bad transform string on the {} item in \
-                                    'objects'", i))
-                    );
+                    .map(|s| {
+                        s[..].try_into().unwrap_or_else(|_| {
+                            panic!(
+                                "Bad transform string on the {} item in \
+                                    'objects'",
+                                i
+                            )
+                        })
+                    });
 
                 // Either create the raw object or choose from named ones
                 let object = {
@@ -182,33 +178,49 @@ impl<'a> TryFrom<&'a mut SerdeValue> for Scene {
                     if json_value.is_string() {
                         // TODO Maybe reference count here instead of clone?
                         let key: String = from_value(json_value)?;
-                        named.get(&key).unwrap_or_else(|| panic!("The name {} is not found in map \
-                                    'named'", key))
+                        named
+                            .get(&key)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "The name {} is not found in map \
+                                    'named'",
+                                    key
+                                )
+                            })
                             .clone()
                     } else {
-                        shapes_from_json(json_value).unwrap_or_else(|_| panic!("Failed with value corresponding to \
-                                    'object' on item {} in 'objects'", i))
+                        shapes_from_json(json_value).unwrap_or_else(|_| {
+                            panic!(
+                                "Failed with value corresponding to \
+                                    'object' on item {} in 'objects'",
+                                i
+                            )
+                        })
                     }
                 };
 
                 let material = from_value(value["material"].take())?;
 
-                objects.push(
-                    objects::Object3D::new(transform, object, material)
-                );
+                objects.push(objects::Object3D::new(transform, object, material));
             }
         } else {
             panic!("The key 'objects' does not match to an array")
         }
 
-        Ok(Scene { ambient_color, fov, lights, objects })
+        Ok(Scene {
+            ambient_color,
+            fov,
+            lights,
+            objects,
+        })
     }
 }
 
 impl Intersect for Scene {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         //TODO intersect lights? (simulate a lens as glass sphere over camera)
-        self.objects.iter()
+        self.objects
+            .iter()
             .filter_map(|x| x.intersect(ray, tmin))
             .reduce(|acc, x| if x.t < acc.t { x } else { acc })
     }

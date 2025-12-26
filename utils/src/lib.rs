@@ -1,11 +1,10 @@
-use std::path;
 use std::io::Write;
+use std::path;
 
 use terminal_toys::spinner::start_spinner;
 
-use image::io::{Reader as ImageReader};
+use image::io::Reader as ImageReader;
 use image::DynamicImage;
-
 
 /// Utility for loading an image from filepath into a DynamicImage
 pub fn open_decode<P>(path: P) -> Result<DynamicImage, String>
@@ -18,20 +17,24 @@ where
             .map_err(|e| e.to_string())?
             .decode()
             .map_err(|e| e.to_string())
-    }).map_err(|e| e.to_string())?
+    })
+    .map_err(|e| e.to_string())?
 }
 
 /// If dirname directory does not exist under current directory, prompt to
 /// create it. Return Ok if exists or created.
 pub fn confirm_dir<T: std::convert::AsRef<path::Path>>(dirname: T) -> Result<(), String> {
     if !path::Path::exists(dirname.as_ref()) {
-        print!("Directory `{}` not found. Create it [y/N]? ", dirname.as_ref().display());
+        print!(
+            "Directory `{}` not found. Create it [y/N]? ",
+            dirname.as_ref().display()
+        );
         std::io::stdout().flush().map_err(|e| e.to_string())?;
         let mut answer = String::new();
         if std::io::stdin().read_line(&mut answer).is_ok() && answer.starts_with('y') {
-            return std::fs::create_dir(dirname).map_err(|e| e.to_string())
+            return std::fs::create_dir(dirname).map_err(|e| e.to_string());
         }
-        return Err("Directory not found".to_string())
+        return Err("Directory not found".to_string());
     }
 
     Ok(())

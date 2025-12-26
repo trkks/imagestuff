@@ -2,11 +2,9 @@ use std::sync;
 
 use terminal_toys as tt;
 
-use crate::{scene, camera, color};
-
+use crate::{camera, color, scene};
 
 const AA_ITERATION_COUNT: usize = 25;
-
 
 pub struct Raycaster {
     pub scene: scene::Scene,
@@ -23,22 +21,13 @@ impl Raycaster {
 
         println!("Rendering:");
 
-        let camera = {
-            sync::Arc::new(self.camera)
-        };
-        let scene = {
-            sync::Arc::new(self.scene)
-        };
+        let camera = { sync::Arc::new(self.camera) };
+        let scene = { sync::Arc::new(self.scene) };
 
         // Spawn the threads to render in
-        for (i, mut progress_bar)
-            in tt::ProgressBar::multiple(
-                    width * height,
-                    25,
-                    thread_count
-                )
-                .into_iter()
-                .enumerate()
+        for (i, mut progress_bar) in tt::ProgressBar::multiple(width * height, 25, thread_count)
+            .into_iter()
+            .enumerate()
         {
             let arc_camera = sync::Arc::clone(&camera);
             let arc_scene = sync::Arc::clone(&scene);
@@ -57,29 +46,26 @@ impl Raycaster {
                 start..end
             };
 
-            let mut img_vec =
-                Vec::with_capacity(width * y_range.len());
+            let mut img_vec = Vec::with_capacity(width * y_range.len());
 
-            img_threads.push(
-                std::thread::spawn(move || {
+            img_threads.push(std::thread::spawn(move || {
                 for iy in y_range {
-                        for ix in 0..width {
-                            img_vec.extend_from_slice(
-                                &shade_pixel(
-                                    ix, iy,
-                                    width, height,
-                                    &arc_camera, &arc_scene,
-                                    is_debug,
-                                )
-                            );
-                            progress_bar.lap()
-                                .expect("Progress bar print failure");
-                        }
+                    for ix in 0..width {
+                        img_vec.extend_from_slice(&shade_pixel(
+                            ix,
+                            iy,
+                            width,
+                            height,
+                            &arc_camera,
+                            &arc_scene,
+                            is_debug,
+                        ));
+                        progress_bar.lap().expect("Progress bar print failure");
                     }
-                    // Return the rendered pixels in segment
-                    img_vec
-                })
-            );
+                }
+                // Return the rendered pixels in segment
+                img_vec
+            }));
         }
 
         // Wait for rendering threads to finish and combine the rendered segments
@@ -104,7 +90,7 @@ fn shade_pixel(
     camera: &sync::Arc<camera::PerspectiveCamera>,
     scene: &sync::Arc<scene::Scene>,
     debug: bool,
-) -> [u8;3] {
+) -> [u8; 3] {
     let mut color = color::consts::BLACK;
 
     // Anti-aliasing: sample each pixel in some pattern and return average
@@ -112,10 +98,7 @@ fn shade_pixel(
     // 1) get location and size of a pixel (input: rectangle)
     // 2) shoot rays into these bounds (output: coordinates)
     for _ in 0..AA_ITERATION_COUNT {
-        let (tx, ty) = (
-            rand::random::<f32>(),
-            rand::random::<f32>(),
-        );
+        let (tx, ty) = (rand::random::<f32>(), rand::random::<f32>());
         // Calculate image plane coordinates x,y so that they're in [-1, 1]
         let x: f32 = (ix as f32 + tx) / width as f32 * 2.0 - 1.0;
         // y is negated to transform from raster-space (ie. origin top left)

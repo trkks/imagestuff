@@ -1,6 +1,6 @@
 use crate::{
-    vector::{Vector3, UnitVector3},
     ray::Ray,
+    vector::{UnitVector3, Vector3},
 };
 
 #[derive(Debug)]
@@ -22,10 +22,29 @@ impl PerspectiveCamera {
     /// A custom field of view `fov` is given in radians and the image plane's
     /// aspect ratio is calculated from `image_width` and `image_height`.
     pub fn with_view(fov: f32, image_width: usize, image_height: usize) -> Self {
-        let horizontal = Vector3 { x: 1.0, y: 0.0, z: 0.0 }.normalized();
-        let up         = Vector3 { x: 0.0, y: 1.0, z: 0.0 }.normalized();
-        let direction  = Vector3 { x: 0.0, y: 0.0, z: -1.0 }.normalized();
-        let position   = Vector3 { x: 0.0, y: 0.0, z: 1.0 };
+        let horizontal = Vector3 {
+            x: 1.0,
+            y: 0.0,
+            z: 0.0,
+        }
+        .normalized();
+        let up = Vector3 {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        }
+        .normalized();
+        let direction = Vector3 {
+            x: 0.0,
+            y: 0.0,
+            z: -1.0,
+        }
+        .normalized();
+        let position = Vector3 {
+            x: 0.0,
+            y: 0.0,
+            z: 1.0,
+        };
 
         // NOTE This assumes that x and y on image plane will be in [-1, 1]
         let dist_to_image = 1.0 / f32::tan(fov / 2.0);
@@ -50,11 +69,14 @@ impl PerspectiveCamera {
 
     pub fn shoot_at(&self, x: f32, y: f32) -> Ray {
         // Generate ray from camera to the image plane
-        let ray_direction =   x * self.horizontal * self.aspect_ratio
-                            + y * self.up
-                            + self.dist_to_image * self.direction
-                            - self.position;
+        let ray_direction = x * self.horizontal * self.aspect_ratio
+            + y * self.up
+            + self.dist_to_image * self.direction
+            - self.position;
 
-        Ray { origin: self.position, direction: ray_direction.normalized() }
+        Ray {
+            origin: self.position,
+            direction: ray_direction.normalized(),
+        }
     }
 }

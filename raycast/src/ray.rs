@@ -1,6 +1,6 @@
 use crate::{
-    vector::{Vector4, Vector3, UnitVector3},
     matrix::SquareMatrix4,
+    vector::{UnitVector3, Vector3, Vector4},
 };
 
 #[derive(Debug)]

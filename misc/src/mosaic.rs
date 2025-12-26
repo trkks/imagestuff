@@ -1,5 +1,4 @@
-use image::{Rgb, Pixel, DynamicImage};
-
+use image::{DynamicImage, Pixel, Rgb};
 
 /// Generate a raycast-crate compatible scene description with spheres of input
 /// image.
@@ -19,9 +18,10 @@ pub fn ascii_image(
     palette: Vec<char>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Then turn the image into a processable format for the ascii conversion
-    let img = img.resize(w, h, image::imageops::FilterType::Triangle)
-                 .grayscale()
-                 .into_rgb16();
+    let img = img
+        .resize(w, h, image::imageops::FilterType::Triangle)
+        .grayscale()
+        .into_rgb16();
 
     let mut ascii = Vec::new();
     let n = img.pixels().len();
@@ -41,10 +41,7 @@ pub fn ascii_image(
 
 /// Get an ascii character that looks like the brightness of the pixel.
 /// If `inverted`, the text is black on white background and vice versa.
-fn pixel_to_ascii(
-    pixel: Rgb<u16>,
-    palette: &[char],
-) -> char {
+fn pixel_to_ascii(pixel: Rgb<u16>, palette: &[char]) -> char {
     // TODO Somehow normalize the "span" of brightness to the palette so that
     // darker images don't just turn straight to black.
     let brightness = pixel.to_luma().0[0] as f32 / u16::MAX as f32;
@@ -55,33 +52,24 @@ fn pixel_to_ascii(
 
 #[cfg(test)]
 mod tests {
-    use image::Rgb;
     use super::pixel_to_ascii;
+    use image::Rgb;
     #[test]
     fn test_pixel_to_ascii() {
         let n = u16::MAX;
         let palette = " -~=o0@#".chars().collect::<Vec<char>>();
 
-        assert_eq!(
-            pixel_to_ascii(Rgb([n, n, n]), &palette),
-            '#'
-        );
-        assert_eq!(
-            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), &palette),
-            '='
-        );
-        assert_eq!(
-            pixel_to_ascii(Rgb([0, 0, 0]), &palette),
-            ' '
-        );
+        assert_eq!(pixel_to_ascii(Rgb([n, n, n]), &palette), '#');
+        assert_eq!(pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), &palette), '=');
+        assert_eq!(pixel_to_ascii(Rgb([0, 0, 0]), &palette), ' ');
         assert_eq!(
             // Inverted palette.
-            pixel_to_ascii(Rgb([n / 2, n / 2, n / 2]), &palette.clone().into_iter().rev().collect::<Vec<char>>()),
+            pixel_to_ascii(
+                Rgb([n / 2, n / 2, n / 2]),
+                &palette.clone().into_iter().rev().collect::<Vec<char>>()
+            ),
             'o'
         );
-        assert_eq!(
-            pixel_to_ascii(Rgb([0, 0, 0]), &palette),
-            ' '
-        );
+        assert_eq!(pixel_to_ascii(Rgb([0, 0, 0]), &palette), ' ');
     }
 }

@@ -1,7 +1,6 @@
 use std::convert::TryFrom;
 
-
-#[derive(serde::Deserialize, Copy,Clone,Debug)]
+#[derive(serde::Deserialize, Copy, Clone, Debug)]
 pub struct Vector3 {
     pub x: f32,
     pub y: f32,
@@ -12,8 +11,7 @@ impl Vector3 {
     pub fn normalized(self) -> UnitVector3 {
         // TODO The caller probably wants to handle the error instead of
         // panicking.
-        UnitVector3::try_from(self)
-            .expect("attempt to normalize approximately zero-length vector")
+        UnitVector3::try_from(self).expect("attempt to normalize approximately zero-length vector")
     }
     pub fn length(&self) -> f32 {
         (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
@@ -25,7 +23,7 @@ impl Vector3 {
         Vector3 {
             x: self.y * other.z - self.z * other.y,
             y: self.z * other.x - self.x * other.z,
-            z: self.x * other.y - self.y * other.x
+            z: self.x * other.y - self.y * other.x,
         }
     }
 }
@@ -36,7 +34,7 @@ impl std::ops::Mul<f32> for Vector3 {
         Vector3 {
             x: self.x * c,
             y: self.y * c,
-            z: self.z * c
+            z: self.z * c,
         }
     }
 }
@@ -54,7 +52,7 @@ impl std::ops::Add<Vector3> for Vector3 {
         Vector3 {
             x: self.x + other.x,
             y: self.y + other.y,
-            z: self.z + other.z
+            z: self.z + other.z,
         }
     }
 }
@@ -65,7 +63,7 @@ impl std::ops::Sub<Vector3> for Vector3 {
         Vector3 {
             x: self.x - other.x,
             y: self.y - other.y,
-            z: self.z - other.z
+            z: self.z - other.z,
         }
     }
 }
@@ -76,7 +74,7 @@ impl std::ops::Neg for Vector3 {
         Vector3 {
             x: -self.x,
             y: -self.y,
-            z: -self.z
+            z: -self.z,
         }
     }
 }
@@ -88,13 +86,19 @@ impl From<UnitVector3> for Vector3 {
 }
 
 /// A 3D vector that is always normalized
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct UnitVector3(Vector3);
 
 impl UnitVector3 {
-    pub fn x(&self) -> f32 { self.0.x }
-    pub fn y(&self) -> f32 { self.0.y }
-    pub fn z(&self) -> f32 { self.0.z }
+    pub fn x(&self) -> f32 {
+        self.0.x
+    }
+    pub fn y(&self) -> f32 {
+        self.0.y
+    }
+    pub fn z(&self) -> f32 {
+        self.0.z
+    }
 
     pub fn reflect(&self, n: &Self) -> Self {
         let v = self.0 - 2.0 * self.0.dot(&n.0) * n.0;
@@ -150,7 +154,7 @@ impl TryFrom<Vector3> for UnitVector3 {
             Ok(Self(Vector3 {
                 x: v.x / length,
                 y: v.y / length,
-                z: v.z / length
+                z: v.z / length,
             }))
         }
     }
@@ -170,15 +174,23 @@ impl Vector4 {
     }
 
     pub fn zero() -> Self {
-        Vector4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
+        Vector4 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w: 0.0,
+        }
     }
 
     pub fn dot(&self, other: &Self) -> f32 {
-        self.x * other.x + self.y * other.y
-        + self.z * other.z + self.w * other.w
+        self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w
     }
 
     pub fn xyz(&self) -> Vector3 {
-        Vector3 { x: self.x, y: self.y, z: self.z }
+        Vector3 {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+        }
     }
 }

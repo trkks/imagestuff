@@ -1,13 +1,11 @@
 use std::fs::File;
-use std::str::FromStr;
 use std::io::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use terminal_toys::{smargs, SmargsBreak, SmargsResult, SmargKind as Sk};
-
+use terminal_toys::{smargs, SmargKind as Sk, SmargsBreak, SmargsResult};
 
 const DEFAULT_PALETTE: &str = " -~=o0@#";
-
 
 #[derive(Debug)]
 enum Palette {
@@ -21,7 +19,7 @@ impl FromStr for Palette {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Ok(match value {
             "spheres" => Self::RaycastSpheres,
-            x         => Self::Ascii(x.to_owned()),
+            x => Self::Ascii(x.to_owned()),
         })
     }
 }
@@ -61,33 +59,29 @@ fn cli_config() -> Result<CliConfig, SmargsBreak> {
     smargs!(
         "Convert a picture into 'ASCII' (UTF8)",
         CliConfig {
-            source:(
-                "Path to picture to convert",
-                ["source", "s"],
-                Sk::Required
-            ),
-            width:(
+            source: ("Path to picture to convert", ["source", "s"], Sk::Required),
+            width: (
                 "Amount of columns in result (this is doubled for better \
                 terminal visuals so give half if you want exact width)",
                 ["width", "w"],
                 Sk::Optional("50"),
             ),
-            height:(
+            height: (
                 "Amount of rows in result",
                 ["height", "h"],
                 Sk::Optional("50")
             ),
-            inverted:(
+            inverted: (
                 "Output 'black on white' for light-colored terminal",
                 ["inverted", "i"],
                 Sk::Flag
             ),
-            palette:(
+            palette: (
                 "UTF8 character-set to use",
                 ["palette", "p"],
                 Sk::Optional(DEFAULT_PALETTE)
             ),
-            output:(
+            output: (
                 "Filepath to save the result in or '-' for printing to stdout",
                 ["out", "o"],
                 Sk::Maybe
@@ -99,88 +93,89 @@ fn cli_config() -> Result<CliConfig, SmargsBreak> {
 }
 
 pub fn main() {
-    match cli_config() {
-        Ok(CliConfig { source, width, height, inverted, palette, output }) => {
+    let CliConfig {
+        source,
+        width,
+        height,
+        inverted,
+        palette,
+        output,
+    } = match cli_config() {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
 
-            // First open imagefile, confirming its validity
-            let img = utils::open_decode(&source)
-                .expect("bad path for source image");
-            let renderer = match palette {
-                Palette::Ascii(ascii_string) =>
-                    Box::new(move || misc::mosaic::ascii_image(
-                        img,
-                        width,
-                        height,
-                        if inverted {
-                            ascii_string.chars().rev().collect()
-                        } else {
-                            ascii_string.chars().collect()
-                        },
-                    )) as Box<dyn FnOnce() -> Result<String, Box<dyn std::error::Error>>>,
-                Palette::RaycastSpheres => 
-                    Box::new(|| misc::mosaic::raycast_sphere_image(
-                        img,
-                        width,
-                        height,
-                    )) as Box<dyn FnOnce() -> Result<String, Box<dyn std::error::Error>>>,
-            };
+    // First open imagefile, confirming its validity
+    let img = utils::open_decode(&source).expect("bad path for source image");
+    let renderer = match palette {
+        Palette::Ascii(ascii_string) => Box::new(move || {
+            misc::mosaic::ascii_image(
+                img,
+                width,
+                height,
+                if inverted {
+                    ascii_string.chars().rev().collect()
+                } else {
+                    ascii_string.chars().collect()
+                },
+            )
+        })
+            as Box<dyn FnOnce() -> Result<String, Box<dyn std::error::Error>>>,
+        Palette::RaycastSpheres => {
+            Box::new(|| misc::mosaic::raycast_sphere_image(img, width, height))
+                as Box<dyn FnOnce() -> Result<String, Box<dyn std::error::Error>>>
+        }
+    };
 
-            match renderer() {
-                Ok(ascii) => {
-                    match output.0 {
-                        Ok(StdoutOrPath::Path(p)) => {
-                            let mut output = PathBuf::new();
-                            if p.is_dir() {
-                                output.push(p);
-                                output.push(&source.file_stem().expect("source file bad"));
-                                output.set_extension("txt");
-                            } else if let Some(parent) = p.parent() {
-                                if let Some(dir) = parent.file_name() {
-                                    if let Err(e) = utils::confirm_dir(&dir) {
-                                        eprintln!("{}", e);
-                                        std::process::exit(1);
-                                    }
-                                }
-                                output.push(p)
-                            } else {
-                                output.push(&source.file_stem().expect("source file bad"));
-                                output.set_extension("txt");
-                            }
-                            eprintln!("\nSaving to {}", output.display());
-
-                            let mut file = match File::create(output) {
-                                Ok(x) => x,
-                                Err(e) => {
-                                    eprintln!("{}", e);
-                                    std::process::exit(1);
-                                }
-                            };
-
-                            if let Err(e) = file.write_all(
-                                ascii.as_bytes()
-                            ) {
-                                eprintln!("{}", e);
-                                std::process::exit(1);
-                            }
-                        },
-                        Ok(StdoutOrPath::Stdout) => {
-                            println!("{}", ascii)
-                        },
-                        Err(e) => {
+    match renderer() {
+        Ok(ascii) => match output.0 {
+            Ok(StdoutOrPath::Path(p)) => {
+                let mut output = PathBuf::new();
+                if p.is_dir() {
+                    output.push(p);
+                    output.push(&source.file_stem().expect("source file bad"));
+                    output.set_extension("txt");
+                } else if let Some(parent) = p.parent() {
+                    if let Some(dir) = parent.file_name() {
+                        if let Err(e) = utils::confirm_dir(&dir) {
                             eprintln!("{}", e);
                             std::process::exit(1);
                         }
                     }
-                },
-                Err(e) => {
+                    output.push(p)
+                } else {
+                    output.push(&source.file_stem().expect("source file bad"));
+                    output.set_extension("txt");
+                }
+                eprintln!("\nSaving to {}", output.display());
+
+                let mut file = match File::create(output) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                if let Err(e) = file.write_all(ascii.as_bytes()) {
                     eprintln!("{}", e);
                     std::process::exit(1);
                 }
+            }
+            Ok(StdoutOrPath::Stdout) => {
+                println!("{}", ascii)
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(1);
             }
         },
         Err(e) => {
             eprintln!("{}", e);
             std::process::exit(1);
-        },
+        }
     }
 }

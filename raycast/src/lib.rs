@@ -1,22 +1,20 @@
 pub mod camera;
-pub mod raycaster;
-pub mod scene;
 mod matrix;
 mod objects;
 mod ray;
+pub mod raycaster;
+pub mod scene;
 mod vector;
-
 
 use std::convert::TryFrom;
 
 use rand::random;
 
 use crate::{
-    ray::Ray,
-    vector::{Vector4, Vector3, UnitVector3},
     matrix::SquareMatrix4,
+    ray::Ray,
+    vector::{UnitVector3, Vector3, Vector4},
 };
-
 
 #[derive(Debug)]
 pub struct Intersection {
@@ -36,7 +34,9 @@ impl TryFrom<&str> for SquareMatrix4 {
     type Error = String; // TODO ParseError
 
     fn try_from(parse_string: &str) -> Result<Self, Self::Error> {
-        let mat = parse_string.trim().split_terminator(';')
+        let mat = parse_string
+            .trim()
+            .split_terminator(';')
             .map(|s| {
                 let s = s.trim();
                 if s.starts_with("Translate") {
@@ -44,26 +44,26 @@ impl TryFrom<&str> for SquareMatrix4 {
                         .split_ascii_whitespace()
                         .map(|q| q.trim().parse::<f32>().unwrap()) //TODO
                         .collect();
-                    SquareMatrix4::translation(
-                        Vector4 { x: v[0], y: v[1], z: v[2], w: 1.0 }
-                    )
+                    SquareMatrix4::translation(Vector4 {
+                        x: v[0],
+                        y: v[1],
+                        z: v[2],
+                        w: 1.0,
+                    })
                 } else if s.starts_with("RotX") {
-                    let rads = utils::degs_to_rads(s[s.find('X').unwrap() + 1..]
-                        .trim()
-                        .parse::<f32>()
-                        .unwrap()); //TODO
+                    let rads = utils::degs_to_rads(
+                        s[s.find('X').unwrap() + 1..].trim().parse::<f32>().unwrap(),
+                    ); //TODO
                     SquareMatrix4::rot_x(rads)
                 } else if s.starts_with("RotY") {
-                    let rads = utils::degs_to_rads(s[s.find('Y').unwrap() + 1..]
-                        .trim()
-                        .parse::<f32>()
-                        .unwrap()); //TODO
+                    let rads = utils::degs_to_rads(
+                        s[s.find('Y').unwrap() + 1..].trim().parse::<f32>().unwrap(),
+                    ); //TODO
                     SquareMatrix4::rot_y(rads)
                 } else if s.starts_with("RotZ") {
-                    let rads = utils::degs_to_rads(s[s.find('Z').unwrap() + 1..]
-                        .trim()
-                        .parse::<f32>()
-                        .unwrap()); //TODO
+                    let rads = utils::degs_to_rads(
+                        s[s.find('Z').unwrap() + 1..].trim().parse::<f32>().unwrap(),
+                    ); //TODO
                     SquareMatrix4::rot_z(rads)
                 } else if s.starts_with("Scale") {
                     let v: Vec<f32> = s[s.find('e').unwrap() + 1..]
@@ -72,14 +72,15 @@ impl TryFrom<&str> for SquareMatrix4 {
                         .collect();
                     if let [a] = v[0..] {
                         // Scale all 3 dimensions the same
-                        SquareMatrix4::scale(
-                            Vector4 { x: a, y: a, z: a, w: a }
-                        )
+                        SquareMatrix4::scale(Vector4 {
+                            x: a,
+                            y: a,
+                            z: a,
+                            w: a,
+                        })
                     } else if let [x, y, z] = v[0..] {
                         // Scale each differently
-                        SquareMatrix4::scale(
-                            Vector4 { x, y, z, w: 1.0 }
-                        )
+                        SquareMatrix4::scale(Vector4 { x, y, z, w: 1.0 })
                     } else {
                         // TODO return Err
                         panic!("Insufficient number of scaling values")
@@ -104,7 +105,11 @@ pub struct Material {
 
 impl std::default::Default for Material {
     fn default() -> Self {
-        Material { color: color::consts::GREY, shininess: 0, surface: Surface::Normal }
+        Material {
+            color: color::consts::GREY,
+            shininess: 0,
+            surface: Surface::Normal,
+        }
     }
 }
 
@@ -123,11 +128,11 @@ pub mod color {
     pub mod consts {
         use super::*;
         pub const BLACK: Color = Color::new(0.0, 0.0, 0.0);
-        pub const GREY:  Color = Color::new(0.5, 0.5, 0.5);
+        pub const GREY: Color = Color::new(0.5, 0.5, 0.5);
         pub const WHITE: Color = Color::new(1.0, 1.0, 1.0);
-        pub const RED:   Color = Color::new(1.0, 0.0, 0.0);
+        pub const RED: Color = Color::new(1.0, 0.0, 0.0);
         pub const GREEN: Color = Color::new(0.0, 1.0, 0.0);
-        pub const BLUE:  Color = Color::new(0.0, 0.0, 1.0);
+        pub const BLUE: Color = Color::new(0.0, 0.0, 1.0);
         pub const NEON_PINK: Color = Color::new(1.0, 0.43, 0.78);
     }
 
@@ -144,7 +149,7 @@ pub mod color {
     impl From<Color> for Rgb<u8> {
         fn from(c: Color) -> Self {
             // Taking the square root applies "gamma 2"
-            Rgb(c.into())                                                   
+            Rgb(c.into())
         }
     }
 
@@ -155,7 +160,7 @@ pub mod color {
                 (c.0.x.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
                 (c.0.y.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
                 (c.0.z.sqrt().clamp(0.0, 1.0) * (u8::MAX as f32 + 1.0)) as u8,
-            ]                                                   
+            ]
         }
     }
 
@@ -165,7 +170,7 @@ pub mod color {
             D: serde::Deserializer<'de>,
         {
             // Source file for scene has colors as triples of values 0 to 255
-            let (r, g, b) = <(u8,u8,u8)>::deserialize(deserializer)?;
+            let (r, g, b) = <(u8, u8, u8)>::deserialize(deserializer)?;
             Ok(Color(Vector3 {
                 x: r as f32 / u8::MAX as f32,
                 y: g as f32 / u8::MAX as f32,
@@ -200,7 +205,7 @@ pub mod color {
             self.0 = self.0 + other.0;
         }
     }
-    
+
     impl std::ops::MulAssign<f32> for Color {
         fn mul_assign(&mut self, other: f32) {
             self.0 = self.0 * other;
@@ -232,14 +237,13 @@ fn diffuse(intersection: &Intersection) -> UnitVector3 {
     let random_sphere_point = Vector3 {
         x: random::<f32>() - 0.5,
         y: random::<f32>() - 0.5,
-        z: random::<f32>() - 0.5
-    }.normalized();
+        z: random::<f32>() - 0.5,
+    }
+    .normalized();
 
-    (
-        (
-            intersection.point
-            + 0.5 * <UnitVector3 as Into<Vector3>>::into(intersection.normal)
-            + random_sphere_point.into()
-        ) - intersection.point
-    ).normalized()
+    ((intersection.point
+        + 0.5 * <UnitVector3 as Into<Vector3>>::into(intersection.normal)
+        + random_sphere_point.into())
+        - intersection.point)
+        .normalized()
 }

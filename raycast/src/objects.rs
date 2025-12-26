@@ -1,10 +1,8 @@
 use crate::{
-    Intersect,
-    Intersection,
-    Material,
     matrix,
     ray::Ray,
-    vector::{Vector3, UnitVector3, Vector4},
+    vector::{UnitVector3, Vector3, Vector4},
+    Intersect, Intersection, Material,
 };
 
 #[derive(Debug)]
@@ -24,10 +22,10 @@ impl Object3D {
     ) -> Self {
         Self {
             // Inverse transform here in advance, because always used so
-            transform: transform.map(|t| 
+            transform: transform.map(|t| {
                 t.inversed()
                     .unwrap_or_else(|| panic!("The matrix does not have an inverse: {}", t))
-            ),
+            }),
             object,
             material: material.unwrap_or_default(),
         }
@@ -38,20 +36,23 @@ impl Intersect for Object3D {
     fn intersect(&self, ray: &Ray, tmin: f32) -> Option<Intersection> {
         // Helper to reduce code duplication
         let get_intersection = |r| {
-            self.object.iter()
+            self.object
+                .iter()
                 .filter_map(|obj| match *obj {
-                    Shape::Sphere { origin, radius } => sphere_intersect(
-                        origin, radius, r, tmin, self.material
-                    ),
-                    Shape::Plane { offset, normal } => plane_intersect(
-                        offset, normal, r, tmin, self.material
-                    ),
-                    Shape::Triangle { vertices, normal } => triangle_intersect(
-                        vertices, normal, r, tmin, self.material
-                    ),
-                    Shape::Torus { origin, inner_radius, tube_radius } => torus_intersect(
-                        origin, inner_radius, tube_radius, r, tmin, self.material
-                    ),
+                    Shape::Sphere { origin, radius } => {
+                        sphere_intersect(origin, radius, r, tmin, self.material)
+                    }
+                    Shape::Plane { offset, normal } => {
+                        plane_intersect(offset, normal, r, tmin, self.material)
+                    }
+                    Shape::Triangle { vertices, normal } => {
+                        triangle_intersect(vertices, normal, r, tmin, self.material)
+                    }
+                    Shape::Torus {
+                        origin,
+                        inner_radius,
+                        tube_radius,
+                    } => torus_intersect(origin, inner_radius, tube_radius, r, tmin, self.material),
                 })
                 // Select the intersection closest to ray
                 .reduce(|acc, x| if x.t < acc.t { x } else { acc })
@@ -61,13 +62,11 @@ impl Intersect for Object3D {
             let ray = Ray::with_transform(ray.origin, ray.direction, t);
             get_intersection(&ray)
                 // If there was an intersection transform its normal to object
-                // space 
+                // space
                 .map(|mut intr| {
                     let normal_v4 = Vector4::from_v3(intr.normal.into(), 0.0);
                     // TODO Is this transformation right? (see also ray.rs)
-                    intr.normal = (&t.transposed() * &normal_v4)
-                        .xyz()
-                        .normalized();
+                    intr.normal = (&t.transposed() * &normal_v4).xyz().normalized();
 
                     intr
                 })
@@ -76,7 +75,6 @@ impl Intersect for Object3D {
         }
     }
 }
-
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub enum Shape {
@@ -112,26 +110,23 @@ fn sphere_intersect(
     let (a, b, c) = (
         1.0,
         2.0 * Vector3::from(ray.direction).dot(&to_ray_origin),
-        to_ray_origin.dot(&to_ray_origin) - radius.powi(2)
+        to_ray_origin.dot(&to_ray_origin) - radius.powi(2),
     );
 
     // Check that the intersection is greater than minimum and select the
     // intersection closest to ray origin
-    let closest = solve_quadratic(a, b, c)
-        .and_then(|xs| min_greater_than(tmin, &xs));
+    let closest = solve_quadratic(a, b, c).and_then(|xs| min_greater_than(tmin, &xs));
 
     if let Some(t) = closest {
         let point = ray.cast(t);
         let normal = (point - origin).normalized();
-        Some(
-            Intersection {
-                t,
-                incoming: ray.direction,
-                point,
-                normal,
-                material,
-            }
-        )
+        Some(Intersection {
+            t,
+            incoming: ray.direction,
+            point,
+            normal,
+            material,
+        })
     } else {
         None
     }
@@ -156,15 +151,13 @@ fn plane_intersect(
         };
         let t = nominator / denominator;
         if tmin < t {
-            return Some(
-                Intersection {
-                    t,
-                    incoming: ray.direction,
-                    point: ray.cast(t),
-                    normal,
-                    material,
-                }
-            )
+            return Some(Intersection {
+                t,
+                incoming: ray.direction,
+                point: ray.cast(t),
+                normal,
+                material,
+            });
         }
     }
 
@@ -175,7 +168,7 @@ fn plane_intersect(
 }
 
 fn triangle_intersect(
-    vertices: [Vector3;3],
+    vertices: [Vector3; 3],
     normal: UnitVector3,
     ray: &Ray,
     tmin: f32,
@@ -192,7 +185,7 @@ fn triangle_intersect(
 
     // If ray and normal are orthogonal, then plane and ray are parallel
     if is_zero(denom) {
-        return None
+        return None;
     }
 
     let t = (d - normal_v.dot(&ray.origin)) / denom;
@@ -210,15 +203,13 @@ fn triangle_intersect(
     let x2 = Vector3::cross(&cb, &qb).dot(&normal_v);
     let x3 = Vector3::cross(&ac, &qc).dot(&normal_v);
     if tmin <= t && x1 >= 0.0 && x2 >= 0.0 && x3 >= 0.0 {
-        return Some(
-            Intersection {
-                t,
-                incoming: ray.direction,
-                point: q,
-                normal,
-                material,
-            }
-        )
+        return Some(Intersection {
+            t,
+            incoming: ray.direction,
+            point: q,
+            normal,
+            material,
+        });
     }
     None
 
@@ -322,23 +313,26 @@ fn torus_intersect(
         let point = ray.cast(t);
         let normal = {
             let p = (point - origin).normalized();
-            let pshadow = Vector3{ x: p.x(), y: p.y(), z: 0.0 }.normalized();
+            let pshadow = Vector3 {
+                x: p.x(),
+                y: p.y(),
+                z: 0.0,
+            }
+            .normalized();
             // Point in the center of tube.
             let q = ir * pshadow;
             (point - q).normalized()
         };
-        Some(
-            Intersection {
-                t,
-                incoming: ray.direction,
-                point,
-                normal,
-                material,
-            }
-        )
+        Some(Intersection {
+            t,
+            incoming: ray.direction,
+            point,
+            normal,
+            material,
+        })
     } else {
         None
-    } 
+    }
 }
 
 fn solve_quadratic(a: f32, b: f32, c: f32) -> Option<[f32; 2]> {
@@ -349,7 +343,7 @@ fn solve_quadratic(a: f32, b: f32, c: f32) -> Option<[f32; 2]> {
     } else {
         Some([
             (-b + discriminant.sqrt()) / (2.0 * a),
-            (-b - discriminant.sqrt()) / (2.0 * a)
+            (-b - discriminant.sqrt()) / (2.0 * a),
         ])
     }
 }
@@ -361,13 +355,9 @@ fn solve_quartic(a3: f32, a2: f32, a1: f32, a0: f32) -> Vec<f32> {
     let a4 = 1.0_f32;
 
     // Make the equation depressed.
-    let a = (-3.0 * a3.powi(2)) / (8.0 * a4.powi(2))
-        + a2 / a4;
-    let b = a3.powi(3) / (8.0 * a4.powi(3))
-        - (a3 * a2) / (2.0 * a4.powi(2))
-        + a1 / a4;
-    let c = (-3.0 * a3.powi(4)) / (256.0 * a4.powi(4))
-        + (a2 * a3.powi(2)) / (16.0 * a4.powi(3))
+    let a = (-3.0 * a3.powi(2)) / (8.0 * a4.powi(2)) + a2 / a4;
+    let b = a3.powi(3) / (8.0 * a4.powi(3)) - (a3 * a2) / (2.0 * a4.powi(2)) + a1 / a4;
+    let c = (-3.0 * a3.powi(4)) / (256.0 * a4.powi(4)) + (a2 * a3.powi(2)) / (16.0 * a4.powi(3))
         - (a3 * a1) / (4.0 * a4.powi(2))
         + a0 / a4;
 
@@ -383,7 +373,7 @@ fn solve_quartic(a3: f32, a2: f32, a1: f32, a0: f32) -> Vec<f32> {
             if is_positive(x2) {
                 ts.push(x2.sqrt());
                 ts.push(-x2.sqrt());
-            } 
+            }
         }
     } else if let Some(ts_) = solve_depressed_quartic(a, b, c) {
         ts.extend(ts_);
@@ -395,25 +385,18 @@ fn solve_quartic(a3: f32, a2: f32, a1: f32, a0: f32) -> Vec<f32> {
 
 /// NOTE: Assuming b != 0.
 fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Option<[f32; 4]> {
-    let p = -(a.powi(2) / 12.0)
-        - c;
+    let p = -(a.powi(2) / 12.0) - c;
 
-    let q = -(a.powi(3) / 108.0)
-        + (a * c) / 3.0
-        - b.powi(2) / 8.0;
+    let q = -(a.powi(3) / 108.0) + (a * c) / 3.0 - b.powi(2) / 8.0;
 
-    let w_ = q.powi(2) / 4.0
-        + p.powi(3) / 27.0;
+    let w_ = q.powi(2) / 4.0 + p.powi(3) / 27.0;
     if !is_positive(w_) {
         return None;
     }
-    let w__ = -(q / 2.0)
-        + w_.sqrt();
+    let w__ = -(q / 2.0) + w_.sqrt();
     let w = w__.cbrt();
 
-    let y = a / 6.0
-        + w
-        - p / (3.0 * w);
+    let y = a / 6.0 + w - p / (3.0 * w);
 
     let e_ = 2.0 * y - a;
     if !is_positive(e_) {
@@ -430,8 +413,8 @@ fn solve_depressed_quartic(a: f32, b: f32, c: f32) -> Option<[f32; 4]> {
     Some([
         0.5 * (-e + (g + f)),
         0.5 * (-e - (g + f)),
-        0.5 * ( e + (g - f)),
-        0.5 * ( e - (g - f)),
+        0.5 * (e + (g - f)),
+        0.5 * (e - (g - f)),
     ])
 }
 
@@ -485,12 +468,7 @@ mod test_quartic {
     #[test]
     fn four_real_roots_1_test() {
         let roots = [-13.82772, -3.37935, 2.72474, 8.48233];
-        let ys = solve_quartic(
-               6.0,
-            -123.0,
-            -126.0,
-            1080.0,
-        );
+        let ys = solve_quartic(6.0, -123.0, -126.0, 1080.0);
         assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
     }
@@ -498,12 +476,7 @@ mod test_quartic {
     #[test]
     fn four_real_roots_2_test() {
         let roots = [-3.0, -2.0, 1.0, 2.0];
-        let ys = solve_quartic(
-             2.0,
-            -7.0,
-            -8.0,
-            12.0,
-        );
+        let ys = solve_quartic(2.0, -7.0, -8.0, 12.0);
         assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
     }
@@ -511,12 +484,7 @@ mod test_quartic {
     #[test]
     fn four_real_roots_3_test() {
         let roots = [2.0, 4.0, -3.0, -5.0];
-        let ys = solve_quartic(
-             2.0,
-           -25.0,
-           -26.0,
-           120.0,
-        );
+        let ys = solve_quartic(2.0, -25.0, -26.0, 120.0);
         assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
     }
@@ -524,12 +492,7 @@ mod test_quartic {
     #[test]
     fn two_real_roots_1_test() {
         let roots = [0.0, 1.19013];
-        let ys = solve_quartic(
-              5.0,
-             17.0,
-            -29.0,
-             0.0,
-        );
+        let ys = solve_quartic(5.0, 17.0, -29.0, 0.0);
         assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
     }
@@ -537,12 +500,7 @@ mod test_quartic {
     #[test]
     fn two_real_roots_2_test() {
         let roots = [-0.31082, 0.18978];
-        let ys = solve_quartic(
-              1.0,
-             17.0,
-              2.0,
-             -1.0,
-        );
+        let ys = solve_quartic(1.0, 17.0, 2.0, -1.0);
         assert_eq!(roots.len(), ys.len(), "Mismatch in amount of roots");
         assert_all_answers_found(&roots, &ys);
     }

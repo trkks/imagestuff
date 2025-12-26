@@ -1,8 +1,6 @@
 use std::path;
 
-
-const HELP: &str =
-r#"Description:
+const HELP: &str = r#"Description:
     Atlas glues images into an array representation.
 Syntax:
     atlas [path] --width int --height int --output path
@@ -36,9 +34,12 @@ fn piped_input() -> Option<Vec<path::PathBuf>> {
             break;
         }
     }
-    if !paths.is_empty() { Some(paths) } else { None }
+    if !paths.is_empty() {
+        Some(paths)
+    } else {
+        None
+    }
 }
-
 
 fn cl_args() -> Option<Vec<path::PathBuf>> {
     eprintln!("Trying to read CLI args...");
@@ -54,7 +55,11 @@ fn cl_args() -> Option<Vec<path::PathBuf>> {
 
     // Load the images
     //let frames = paths.iter().map(utils::open_decode);
-    if !paths.is_empty() { Some(paths) } else { None }
+    if !paths.is_empty() {
+        Some(paths)
+    } else {
+        None
+    }
 }
 
 fn get_path(x: &str, paths: &mut Vec<path::PathBuf>) {
@@ -70,17 +75,18 @@ fn process(paths: Vec<path::PathBuf>) {
     println!("{:?}", paths);
 
     let result = misc::atlas(
-        paths.iter().map(|x| utils::open_decode(x).unwrap()).collect()
+        paths
+            .iter()
+            .map(|x| utils::open_decode(x).unwrap())
+            .collect(),
     );
 
     let user_output = std::env::args().nth(1);
 
-
     // Save the result to the wanted file if given
     // TODO Should the decided dimensions (size of a single "frame" and the
     // table-configuration) be included to the filename?
-    let output_path = user_output
-        .unwrap_or(String::from("./pics/atlas_result.png"));
+    let output_path = user_output.unwrap_or(String::from("./pics/atlas_result.png"));
     println!("Saving to {}", output_path);
     if let Err(e) = result.save(output_path) {
         eprintln!("Failed to save: {}", e);
