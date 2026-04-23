@@ -3,10 +3,6 @@ use std::io::Write;
 use std::path;
 use std::str::FromStr;
 
-use terminal_toys::smargs;
-
-const DEFAULT_PALETTE: &str = " -~=o0@#";
-
 #[derive(Debug)]
 enum Palette {
     Ascii(String),
@@ -32,57 +28,8 @@ impl FromStr for Palette {
     }
 }
 
-type CliConfig = (
-    Vec<path::PathBuf>,
-    usize,
-    usize,
-    bool,
-    String,
-    path::PathBuf,
-);
-
-fn cli_config() -> Result<CliConfig, String> {
-    smargs::arguments!(
-        "Convert a picture into 'ASCII' (UTF8)",
-        (
-            "Path to picture to convert",
-            ["source", "s"],
-            smargs::Argument::RequiredList
-        ),
-        (
-            "Amount of columns in result (this is doubled for better \
-                terminal visuals so give half if you want exact width)",
-            ["width", "w"],
-            smargs::Argument::Optional("50")
-        ),
-        (
-            "Amount of rows in result",
-            ["height", "h"],
-            smargs::Argument::Optional("50")
-        ),
-        (
-            "Output 'black on white' for light-colored terminal",
-            ["inverted", "i"],
-            smargs::Argument::Flag
-        ),
-        (
-            "UTF8 character-set to use",
-            ["palette", "p"],
-            smargs::Argument::Optional(DEFAULT_PALETTE)
-        ),
-        (
-            "Filepath to save the result in or '-' for printing to stdout",
-            ["out", "o"],
-            smargs::Argument::Optional("renders")
-        )
-    )
-    .help_keys(vec!["help"])
-    .from_env()
-    .map_err(|e| e.to_string())
-}
-
 pub fn main() {
-    let (sources, width, height, inverted, palette, output_dir) = cli_config().unwrap();
+    let (sources, width, height, inverted, palette, output_dir) = utils::cli_config().unwrap();
 
     let palette = palette.parse().expect("bad palette");
 

@@ -2,53 +2,44 @@ use std::io::{self, Write};
 use std::path;
 
 use image::RgbImage;
-use terminal_toys as tt;
+use terminal_toys::smargs;
 
 use raycast::{camera, raycaster, scene};
 
-struct Args(
-    path::PathBuf,
-    usize,
-    usize,
-    usize,
-    bool,
-    tt::smargs::Result<path::PathBuf>,
-);
+type Args = (path::PathBuf, usize, usize, usize, bool, path::PathBuf);
 
 fn cli_args() -> Result<Args, String> {
-    tt::smärgs!(
+    smargs::arguments!(
         "Generate an image based on a scene description in JSON",
-        Args(
-            (
-                "Source path of scene in JSON",
-                ["s", "source"],
-                tt::smargs::Kind::List(1)
-            ),
-            (
-                "Width of result in pixels",
-                ["w", "width"],
-                tt::smargs::Kind::Optional("128")
-            ),
-            (
-                "Height of result in pixels",
-                ["h", "height"],
-                tt::smargs::Kind::Optional("96")
-            ),
-            (
-                "Amount of CPU threads to use",
-                ["t", "threads"],
-                tt::smargs::Kind::Optional("1")
-            ),
-            (
-                "If should use debug coloring",
-                ["d", "debug"],
-                tt::smargs::Kind::Flag
-            ),
-            (
-                "Output path of the render",
-                ["o", "out"],
-                tt::smargs::Kind::Maybe
-            )
+        (
+            "Source path of scene in JSON",
+            ["s", "source"],
+            smargs::Argument::RequiredList
+        ),
+        (
+            "Width of result in pixels",
+            ["w", "width"],
+            smargs::Argument::Optional("128")
+        ),
+        (
+            "Height of result in pixels",
+            ["h", "height"],
+            smargs::Argument::Optional("96")
+        ),
+        (
+            "Amount of CPU threads to use",
+            ["t", "threads"],
+            smargs::Argument::Optional("1")
+        ),
+        (
+            "If should use debug coloring",
+            ["d", "debug"],
+            smargs::Argument::Flag
+        ),
+        (
+            "Output path of the render",
+            ["o", "out"],
+            smargs::Argument::Optional("")
         ),
     )
     .help_keys(vec!["help"])
@@ -122,7 +113,7 @@ impl Args {
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Args(source_path, width, height, thread_count, is_debug, output_path) = cli_args()
+    let (source_path, width, height, thread_count, is_debug, output_path) = cli_args()
         .unwrap_or_else(|e| {
             eprintln!("{}", e);
             std::process::exit(1);
